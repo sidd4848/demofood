@@ -31,9 +31,8 @@ class AppData extends ChangeNotifier {
   // Allergies (modern chips)
   final Set<String> allergies = {};
 
-  // Cheat day
-  bool cheatDayEnabled = false;
-  String cheatDayPreference = "Moderate"; // Light/Moderate/Heavy
+  // Health symptoms
+  final Set<String> healthSymptoms = {};
 
   // Frequency: item -> {mode: everyday|weekdays|monthly, weekdays:[0..6]}
   final Map<String, Map<String, dynamic>> frequency = {};
@@ -93,6 +92,16 @@ class AppData extends ChangeNotifier {
     notifyListeners();
   }
 
+  // ---------- health symptoms ----------
+  void toggleHealthSymptom(String value) {
+    if (healthSymptoms.contains(value)) {
+      healthSymptoms.remove(value);
+    } else {
+      healthSymptoms.add(value);
+    }
+    notifyListeners();
+  }
+
   // ---------- JSON ----------
   Map<String, dynamic> toJson() => {
         "profile": {
@@ -109,8 +118,7 @@ class AppData extends ChangeNotifier {
           "nonVegItems": nonVegItems.toList(),
           "cuisines": cuisines,
           "allergies": allergies.toList(),
-          "cheatDayEnabled": cheatDayEnabled,
-          "cheatDayPreference": cheatDayPreference,
+          "healthSymptoms": healthSymptoms.toList(),
         },
         "frequency": frequency,
       };
@@ -141,8 +149,9 @@ class AppData extends ChangeNotifier {
       ..clear()
       ..addAll(((pref["allergies"] ?? []) as List).cast<String>());
 
-    cheatDayEnabled = (pref["cheatDayEnabled"] ?? false) as bool;
-    cheatDayPreference = (pref["cheatDayPreference"] ?? "Moderate") as String;
+    healthSymptoms
+      ..clear()
+      ..addAll(((pref["healthSymptoms"] ?? []) as List).cast<String>());
 
     frequency
       ..clear()
@@ -573,7 +582,7 @@ class _UserDetailsPageState extends State<UserDetailsPage> {
 
 /// -------------------------------
 /// Step 2: Preferences
-/// Diet + NonVeg items + Cuisines + Allergies + Cheat Day
+/// Diet + NonVeg items + Cuisines + Allergies + Health Symptoms
 /// -------------------------------
 class PreferencesPage extends StatelessWidget {
   final AppData data;
@@ -620,11 +629,11 @@ class PreferencesPage extends StatelessWidget {
 
               const SizedBox(height: 18),
               _SectionTitle(
-                title: "Cheat day preference",
-                subtitle: "Optional. Helps plan flexibility without guilt.",
+                title: "Health symptoms",
+                subtitle: "Select conditions to tailor your diet plan.",
               ),
               const SizedBox(height: 10),
-              _CheatDaySelector(data: data),
+              _HealthSymptomsSelector(data: data),
 
               const SizedBox(height: 22),
               FilledButton(
@@ -958,13 +967,21 @@ class _AllergySelector extends StatelessWidget {
 }
 
 /// -------------------------------
-/// Cheat day
+/// Health symptoms
 /// -------------------------------
-class _CheatDaySelector extends StatelessWidget {
+class _HealthSymptomsSelector extends StatelessWidget {
   final AppData data;
-  const _CheatDaySelector({required this.data});
+  const _HealthSymptomsSelector({required this.data});
 
-  static const prefs = ["Light", "Moderate", "Heavy"];
+  static const options = [
+    "High blood pressure",
+    "Diabetes",
+    "High cholesterol",
+    "Thyroid issues",
+    "PCOS/PCOD",
+    "Kidney concerns",
+    "Digestive issues",
+  ];
 
   @override
   Widget build(BuildContext context) {
@@ -972,31 +989,18 @@ class _CheatDaySelector extends StatelessWidget {
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       child: Padding(
         padding: const EdgeInsets.all(14),
-        child: Column(
-          children: [
-            SwitchListTile(
-              value: data.cheatDayEnabled,
-              onChanged: (v) {
-                data.cheatDayEnabled = v;
-                data.notifyListeners();
-              },
-              title: const Text("Enable cheat day"),
-              subtitle: const Text("We’ll keep your plan flexible."),
-              contentPadding: EdgeInsets.zero,
-            ),
-            const SizedBox(height: 8),
-            if (data.cheatDayEnabled)
-              DropdownButtonFormField<String>(
-                value: data.cheatDayPreference,
-                decoration: const InputDecoration(labelText: "Cheat day intensity"),
-                items: prefs.map((p) => DropdownMenuItem(value: p, child: Text(p))).toList(),
-                onChanged: (v) {
-                  if (v == null) return;
-                  data.cheatDayPreference = v;
-                  data.notifyListeners();
-                },
-              ),
-          ],
+        child: Wrap(
+          spacing: 10,
+          runSpacing: 10,
+          children: options.map((symptom) {
+            final selected = data.healthSymptoms.contains(symptom);
+            return FilterChip(
+              label: Text(symptom),
+              selected: selected,
+              selectedColor: kSecondary.withOpacity(0.18),
+              onSelected: (_) => data.toggleHealthSymptom(symptom),
+            );
+          }).toList(),
         ),
       ),
     );
@@ -1206,7 +1210,7 @@ class _SummaryDialog extends StatelessWidget {
           "Non-veg items: ${data.nonVegItems.isEmpty ? '-' : data.nonVegItems.join(', ')}\n"
           "Cuisines: ${data.cuisines.isEmpty ? '-' : data.cuisines.join(', ')}\n"
           "Allergies: ${data.allergies.isEmpty ? '-' : data.allergies.join(', ')}\n"
-          "Cheat day: ${data.cheatDayEnabled ? data.cheatDayPreference : 'Disabled'}\n\n"
+          "Health symptoms: ${data.healthSymptoms.isEmpty ? '-' : data.healthSymptoms.join(', ')}\n\n"
           "Frequency:\n${freqText()}",
         ),
       ),
