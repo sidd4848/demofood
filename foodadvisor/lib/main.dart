@@ -189,24 +189,10 @@ class AppData extends ChangeNotifier {
     await f.writeAsString(jsonEncode(toJson()));
   }
 
-  String _normalizeApiUrl(String apiUrl) {
-    try {
-      final uri = Uri.parse(apiUrl);
-      if (kIsWeb || !Platform.isAndroid) return apiUrl;
-      if (uri.host == 'localhost' || uri.host == '127.0.0.1') {
-        return uri.replace(host: '10.0.2.2').toString();
-      }
-      return apiUrl;
-    } catch (_) {
-      return apiUrl;
-    }
-  }
-
   Future<void> sendToApi(String apiUrl) async {
-    final normalizedUrl = _normalizeApiUrl(apiUrl);
     final client = HttpClient();
     try {
-      final req = await client.postUrl(Uri.parse(normalizedUrl));
+      final req = await client.postUrl(Uri.parse(apiUrl));
       req.headers.contentType = ContentType.json;
       req.write(jsonEncode(toJson()));
       final resp = await req.close();
@@ -214,8 +200,6 @@ class AppData extends ChangeNotifier {
         final body = await resp.transform(utf8.decoder).join();
         throw HttpException('Failed (${resp.statusCode}): $body');
       }
-    } on SocketException catch (e) {
-      throw SocketException('Connection to $normalizedUrl failed: ${e.message}');
     } finally {
       client.close();
     }
@@ -1162,14 +1146,13 @@ class FrequencyPage extends StatelessWidget {
                   final config = await StorageConfig.load();
                   try {
                     if (config.mode == StorageMode.api && config.apiUrl != null && config.apiUrl!.isNotEmpty) {
-                      final targetUrl = data._normalizeApiUrl(config.apiUrl!);
                       await data.sendToApi(config.apiUrl!);
                       if (!context.mounted) return;
                       showDialog(
                         context: context,
                         builder: (_) => AlertDialog(
                           title: const Text("Sent ✅"),
-                          content: Text("Profile posted to API: $targetUrl"),
+                          content: Text("Profile posted to API: ${config.apiUrl}"),
                           actions: [
                             TextButton(onPressed: () => Navigator.pop(context), child: const Text("OK")),
                           ],
