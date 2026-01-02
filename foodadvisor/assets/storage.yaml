@@ -1,0 +1,5 @@
+storage:
+  # mode: local | api
+  mode: local
+  # api_url is used when mode: api (for Android emulator use http://10.0.2.2:8000/...)
+  api_url: http://localhost:8000/profile
