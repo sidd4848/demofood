@@ -1,7 +1,9 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
 
 void main() => runApp(const FoodAdvisorApp());
@@ -31,12 +33,28 @@ class AppData extends ChangeNotifier {
   // Allergies (modern chips)
   final Set<String> allergies = {};
 
-  // Cheat day
-  bool cheatDayEnabled = false;
-  String cheatDayPreference = "Moderate"; // Light/Moderate/Heavy
+  // Health symptoms
+  final Set<String> healthSymptoms = {};
 
   // Frequency: item -> {mode: everyday|weekdays|monthly, weekdays:[0..6]}
   final Map<String, Map<String, dynamic>> frequency = {};
+
+  void reset() {
+    name = "";
+    gender = "Male";
+    age = 25;
+    heightCm = 170;
+    weightKg = 70;
+    bodyFatPct = null;
+    visceralFatPct = null;
+    dietType = DietType.veg;
+    nonVegItems.clear();
+    cuisines.clear();
+    allergies.clear();
+    healthSymptoms.clear();
+    frequency.clear();
+    notifyListeners();
+  }
 
   // ---------- cuisine helpers ----------
   void addCuisine(String c) {
@@ -93,6 +111,16 @@ class AppData extends ChangeNotifier {
     notifyListeners();
   }
 
+  // ---------- health symptoms ----------
+  void toggleHealthSymptom(String value) {
+    if (healthSymptoms.contains(value)) {
+      healthSymptoms.remove(value);
+    } else {
+      healthSymptoms.add(value);
+    }
+    notifyListeners();
+  }
+
   // ---------- JSON ----------
   Map<String, dynamic> toJson() => {
         "profile": {
@@ -109,8 +137,7 @@ class AppData extends ChangeNotifier {
           "nonVegItems": nonVegItems.toList(),
           "cuisines": cuisines,
           "allergies": allergies.toList(),
-          "cheatDayEnabled": cheatDayEnabled,
-          "cheatDayPreference": cheatDayPreference,
+          "healthSymptoms": healthSymptoms.toList(),
         },
         "frequency": frequency,
       };
@@ -141,8 +168,9 @@ class AppData extends ChangeNotifier {
       ..clear()
       ..addAll(((pref["allergies"] ?? []) as List).cast<String>());
 
-    cheatDayEnabled = (pref["cheatDayEnabled"] ?? false) as bool;
-    cheatDayPreference = (pref["cheatDayPreference"] ?? "Moderate") as String;
+    healthSymptoms
+      ..clear()
+      ..addAll(((pref["healthSymptoms"] ?? []) as List).cast<String>());
 
     frequency
       ..clear()
@@ -161,12 +189,90 @@ class AppData extends ChangeNotifier {
     await f.writeAsString(jsonEncode(toJson()));
   }
 
+  String _normalizeApiUrl(String apiUrl) {
+    try {
+      final uri = Uri.parse(apiUrl);
+      if (kIsWeb || !Platform.isAndroid) return apiUrl;
+      if (uri.host == 'localhost' || uri.host == '127.0.0.1') {
+        return uri.replace(host: '10.0.2.2').toString();
+      }
+      return apiUrl;
+    } catch (_) {
+      return apiUrl;
+    }
+  }
+
+  Future<void> sendToApi(String apiUrl) async {
+    final normalizedUrl = _normalizeApiUrl(apiUrl);
+    final client = HttpClient();
+    try {
+      final req = await client.postUrl(Uri.parse(normalizedUrl));
+      req.headers.contentType = ContentType.json;
+      req.write(jsonEncode(toJson()));
+      final resp = await req.close();
+      if (resp.statusCode < 200 || resp.statusCode >= 300) {
+        final body = await resp.transform(utf8.decoder).join();
+        throw HttpException('Failed (${resp.statusCode}): $body');
+      }
+    } on SocketException catch (e) {
+      throw SocketException('Connection to $normalizedUrl failed: ${e.message}');
+    } finally {
+      client.close();
+    }
+  }
+
   Future<bool> loadIfExists() async {
     final f = await _profileFile();
     if (!await f.exists()) return false;
     final txt = await f.readAsString();
     fromJson(jsonDecode(txt) as Map<String, dynamic>);
     return true;
+  }
+}
+
+enum StorageMode { local, api }
+
+class StorageConfig {
+  final StorageMode mode;
+  final String? apiUrl;
+
+  StorageConfig({required this.mode, this.apiUrl});
+
+  static Future<StorageConfig> load() async {
+    try {
+      final raw = await rootBundle.loadString('assets/storage.yaml');
+      var mode = StorageMode.local;
+      String? apiUrl;
+      var inStorage = false;
+
+      for (final line in raw.split('\n')) {
+        final trimmed = line.trim();
+        if (trimmed.isEmpty || trimmed.startsWith('#')) continue;
+        if (trimmed.startsWith('storage:')) {
+          inStorage = true;
+          continue;
+        }
+        if (!inStorage) continue;
+
+        final match = RegExp(r'^([a-zA-Z_]+):\s*(.*)$').firstMatch(trimmed);
+        if (match == null) continue;
+        final key = match.group(1);
+        final value = match.group(2)?.trim();
+        if (key == 'mode') {
+          if (value?.toLowerCase() == 'api') mode = StorageMode.api;
+        } else if (key == 'api_url') {
+          apiUrl = value;
+        }
+      }
+
+      if (mode == StorageMode.api && (apiUrl == null || apiUrl!.isEmpty)) {
+        mode = StorageMode.local;
+      }
+
+      return StorageConfig(mode: mode, apiUrl: apiUrl);
+    } catch (_) {
+      return StorageConfig(mode: StorageMode.local);
+    }
   }
 }
 
@@ -282,6 +388,7 @@ class LandingPage extends StatelessWidget {
                         ),
                       ),
                       onPressed: () {
+                        data.reset();
                         Navigator.push(
                           context,
                           MaterialPageRoute(
@@ -573,7 +680,7 @@ class _UserDetailsPageState extends State<UserDetailsPage> {
 
 /// -------------------------------
 /// Step 2: Preferences
-/// Diet + NonVeg items + Cuisines + Allergies + Cheat Day
+/// Diet + NonVeg items + Cuisines + Allergies + Health Symptoms
 /// -------------------------------
 class PreferencesPage extends StatelessWidget {
   final AppData data;
@@ -620,11 +727,11 @@ class PreferencesPage extends StatelessWidget {
 
               const SizedBox(height: 18),
               _SectionTitle(
-                title: "Cheat day preference",
-                subtitle: "Optional. Helps plan flexibility without guilt.",
+                title: "Health symptoms",
+                subtitle: "Select conditions to tailor your diet plan.",
               ),
               const SizedBox(height: 10),
-              _CheatDaySelector(data: data),
+              _HealthSymptomsSelector(data: data),
 
               const SizedBox(height: 22),
               FilledButton(
@@ -958,13 +1065,21 @@ class _AllergySelector extends StatelessWidget {
 }
 
 /// -------------------------------
-/// Cheat day
+/// Health symptoms
 /// -------------------------------
-class _CheatDaySelector extends StatelessWidget {
+class _HealthSymptomsSelector extends StatelessWidget {
   final AppData data;
-  const _CheatDaySelector({required this.data});
+  const _HealthSymptomsSelector({required this.data});
 
-  static const prefs = ["Light", "Moderate", "Heavy"];
+  static const options = [
+    "High blood pressure",
+    "Diabetes",
+    "High cholesterol",
+    "Thyroid issues",
+    "PCOS/PCOD",
+    "Kidney concerns",
+    "Digestive issues",
+  ];
 
   @override
   Widget build(BuildContext context) {
@@ -972,31 +1087,18 @@ class _CheatDaySelector extends StatelessWidget {
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       child: Padding(
         padding: const EdgeInsets.all(14),
-        child: Column(
-          children: [
-            SwitchListTile(
-              value: data.cheatDayEnabled,
-              onChanged: (v) {
-                data.cheatDayEnabled = v;
-                data.notifyListeners();
-              },
-              title: const Text("Enable cheat day"),
-              subtitle: const Text("We’ll keep your plan flexible."),
-              contentPadding: EdgeInsets.zero,
-            ),
-            const SizedBox(height: 8),
-            if (data.cheatDayEnabled)
-              DropdownButtonFormField<String>(
-                value: data.cheatDayPreference,
-                decoration: const InputDecoration(labelText: "Cheat day intensity"),
-                items: prefs.map((p) => DropdownMenuItem(value: p, child: Text(p))).toList(),
-                onChanged: (v) {
-                  if (v == null) return;
-                  data.cheatDayPreference = v;
-                  data.notifyListeners();
-                },
-              ),
-          ],
+        child: Wrap(
+          spacing: 10,
+          runSpacing: 10,
+          children: options.map((symptom) {
+            final selected = data.healthSymptoms.contains(symptom);
+            return FilterChip(
+              label: Text(symptom),
+              selected: selected,
+              selectedColor: kSecondary.withOpacity(0.18),
+              onSelected: (_) => data.toggleHealthSymptom(symptom),
+            );
+          }).toList(),
         ),
       ),
     );
@@ -1057,17 +1159,47 @@ class FrequencyPage extends StatelessWidget {
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
                 ),
                 onPressed: () async {
-                  await data.save();
-                  if (context.mounted) {
+                  final config = await StorageConfig.load();
+                  try {
+                    if (config.mode == StorageMode.api && config.apiUrl != null && config.apiUrl!.isNotEmpty) {
+                      final targetUrl = data._normalizeApiUrl(config.apiUrl!);
+                      await data.sendToApi(config.apiUrl!);
+                      if (!context.mounted) return;
+                      showDialog(
+                        context: context,
+                        builder: (_) => AlertDialog(
+                          title: const Text("Sent ✅"),
+                          content: Text("Profile posted to API: $targetUrl"),
+                          actions: [
+                            TextButton(onPressed: () => Navigator.pop(context), child: const Text("OK")),
+                          ],
+                        ),
+                      );
+                    } else {
+                      await data.save();
+                      if (!context.mounted) return;
+                      showDialog(
+                        context: context,
+                        builder: (_) => AlertDialog(
+                          title: const Text("Saved ✅"),
+                          content: const Text(
+                            "Saved locally as JSON in app documents storage:\nfoodadvisor_profile.json",
+                          ),
+                          actions: [
+                            TextButton(onPressed: () => Navigator.pop(context), child: const Text("OK")),
+                          ],
+                        ),
+                      );
+                    }
+                  } catch (e) {
+                    if (!context.mounted) return;
                     showDialog(
                       context: context,
                       builder: (_) => AlertDialog(
-                        title: const Text("Saved ✅"),
-                        content: const Text(
-                          "Saved locally as JSON in app documents storage:\nfoodadvisor_profile.json",
-                        ),
+                        title: const Text("Error"),
+                        content: Text('Could not submit profile: $e'),
                         actions: [
-                          TextButton(onPressed: () => Navigator.pop(context), child: const Text("OK")),
+                          TextButton(onPressed: () => Navigator.pop(context), child: const Text("Close")),
                         ],
                       ),
                     );
@@ -1206,7 +1338,7 @@ class _SummaryDialog extends StatelessWidget {
           "Non-veg items: ${data.nonVegItems.isEmpty ? '-' : data.nonVegItems.join(', ')}\n"
           "Cuisines: ${data.cuisines.isEmpty ? '-' : data.cuisines.join(', ')}\n"
           "Allergies: ${data.allergies.isEmpty ? '-' : data.allergies.join(', ')}\n"
-          "Cheat day: ${data.cheatDayEnabled ? data.cheatDayPreference : 'Disabled'}\n\n"
+          "Health symptoms: ${data.healthSymptoms.isEmpty ? '-' : data.healthSymptoms.join(', ')}\n\n"
           "Frequency:\n${freqText()}",
         ),
       ),
