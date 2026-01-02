@@ -189,10 +189,24 @@ class AppData extends ChangeNotifier {
     await f.writeAsString(jsonEncode(toJson()));
   }
 
+  String _normalizeApiUrl(String apiUrl) {
+    try {
+      final uri = Uri.parse(apiUrl);
+      if (kIsWeb || !Platform.isAndroid) return apiUrl;
+      if (uri.host == 'localhost' || uri.host == '127.0.0.1') {
+        return uri.replace(host: '10.0.2.2').toString();
+      }
+      return apiUrl;
+    } catch (_) {
+      return apiUrl;
+    }
+  }
+
   Future<void> sendToApi(String apiUrl) async {
+    final normalizedUrl = _normalizeApiUrl(apiUrl);
     final client = HttpClient();
     try {
-      final req = await client.postUrl(Uri.parse(apiUrl));
+      final req = await client.postUrl(Uri.parse(normalizedUrl));
       req.headers.contentType = ContentType.json;
       req.write(jsonEncode(toJson()));
       final resp = await req.close();
@@ -200,8 +214,27 @@ class AppData extends ChangeNotifier {
         final body = await resp.transform(utf8.decoder).join();
         throw HttpException('Failed (${resp.statusCode}): $body');
       }
+    } on SocketException catch (e) {
+      throw SocketException('Connection to $normalizedUrl failed: ${e.message}');
     } finally {
       client.close();
+    }
+  }
+
+  Future<void> verifyApiReachable(String apiUrl) async {
+    final normalizedUrl = _normalizeApiUrl(apiUrl);
+    final uri = Uri.parse(normalizedUrl);
+    final port = uri.hasPort
+        ? uri.port
+        : uri.scheme.toLowerCase() == 'https'
+            ? 443
+            : 80;
+
+    try {
+      final socket = await Socket.connect(uri.host, port, timeout: const Duration(seconds: 4));
+      await socket.close();
+    } on SocketException catch (e) {
+      throw SocketException('Could not reach $normalizedUrl — ${e.message}\nIf you are on the Android emulator, use http://10.0.2.2:<port>. If you are on a physical device, use your computer\'s IP.');
     }
   }
 
@@ -1136,6 +1169,53 @@ class FrequencyPage extends StatelessWidget {
               ...items.map((item) => _FrequencyCard(data: data, item: item)).toList(),
 
               const SizedBox(height: 20),
+              FutureBuilder<StorageConfig>(
+                future: StorageConfig.load(),
+                builder: (context, snapshot) {
+                  final config = snapshot.data;
+                  if (config == null || config.mode != StorageMode.api || config.apiUrl == null || config.apiUrl!.isEmpty) {
+                    return const SizedBox.shrink();
+                  }
+
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 12),
+                    child: OutlinedButton.icon(
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 12),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                      ),
+                      icon: const Icon(Icons.wifi_tethering_rounded),
+                      label: Text('Test API connection (${data._normalizeApiUrl(config.apiUrl!)})'),
+                      onPressed: () async {
+                        try {
+                          await data.verifyApiReachable(config.apiUrl!);
+                          if (!context.mounted) return;
+                          showDialog(
+                            context: context,
+                            builder: (_) => const AlertDialog(
+                              title: Text('API reachable ✅'),
+                              content: Text('Your FastAPI endpoint accepted a socket connection.'),
+                            ),
+                          );
+                        } catch (e) {
+                          if (!context.mounted) return;
+                          showDialog(
+                            context: context,
+                            builder: (_) => AlertDialog(
+                              title: const Text('API unreachable'),
+                              content: Text('$e'),
+                              actions: [
+                                TextButton(onPressed: () => Navigator.pop(context), child: const Text('Close')),
+                              ],
+                            ),
+                          );
+                        }
+                      },
+                    ),
+                  );
+                },
+              ),
+
               FilledButton(
                 style: FilledButton.styleFrom(
                   backgroundColor: kPrimary,
@@ -1146,13 +1226,14 @@ class FrequencyPage extends StatelessWidget {
                   final config = await StorageConfig.load();
                   try {
                     if (config.mode == StorageMode.api && config.apiUrl != null && config.apiUrl!.isNotEmpty) {
+                      final targetUrl = data._normalizeApiUrl(config.apiUrl!);
                       await data.sendToApi(config.apiUrl!);
                       if (!context.mounted) return;
                       showDialog(
                         context: context,
                         builder: (_) => AlertDialog(
                           title: const Text("Sent ✅"),
-                          content: Text("Profile posted to API: ${config.apiUrl}"),
+                          content: Text("Profile posted to API: $targetUrl"),
                           actions: [
                             TextButton(onPressed: () => Navigator.pop(context), child: const Text("OK")),
                           ],
