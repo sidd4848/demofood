@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
 
 void main() => runApp(const FoodAdvisorApp());
@@ -36,6 +37,23 @@ class AppData extends ChangeNotifier {
 
   // Frequency: item -> {mode: everyday|weekdays|monthly, weekdays:[0..6]}
   final Map<String, Map<String, dynamic>> frequency = {};
+
+  void reset() {
+    name = "";
+    gender = "Male";
+    age = 25;
+    heightCm = 170;
+    weightKg = 70;
+    bodyFatPct = null;
+    visceralFatPct = null;
+    dietType = DietType.veg;
+    nonVegItems.clear();
+    cuisines.clear();
+    allergies.clear();
+    healthSymptoms.clear();
+    frequency.clear();
+    notifyListeners();
+  }
 
   // ---------- cuisine helpers ----------
   void addCuisine(String c) {
@@ -170,12 +188,74 @@ class AppData extends ChangeNotifier {
     await f.writeAsString(jsonEncode(toJson()));
   }
 
+  Future<void> sendToApi(String apiUrl) async {
+    final client = HttpClient();
+    try {
+      final req = await client.postUrl(Uri.parse(apiUrl));
+      req.headers.contentType = ContentType.json;
+      req.write(jsonEncode(toJson()));
+      final resp = await req.close();
+      if (resp.statusCode < 200 || resp.statusCode >= 300) {
+        final body = await resp.transform(utf8.decoder).join();
+        throw HttpException('Failed (${resp.statusCode}): $body');
+      }
+    } finally {
+      client.close();
+    }
+  }
+
   Future<bool> loadIfExists() async {
     final f = await _profileFile();
     if (!await f.exists()) return false;
     final txt = await f.readAsString();
     fromJson(jsonDecode(txt) as Map<String, dynamic>);
     return true;
+  }
+}
+
+enum StorageMode { local, api }
+
+class StorageConfig {
+  final StorageMode mode;
+  final String? apiUrl;
+
+  StorageConfig({required this.mode, this.apiUrl});
+
+  static Future<StorageConfig> load() async {
+    try {
+      final raw = await rootBundle.loadString('assets/storage.yaml');
+      var mode = StorageMode.local;
+      String? apiUrl;
+      var inStorage = false;
+
+      for (final line in raw.split('\n')) {
+        final trimmed = line.trim();
+        if (trimmed.isEmpty || trimmed.startsWith('#')) continue;
+        if (trimmed.startsWith('storage:')) {
+          inStorage = true;
+          continue;
+        }
+        if (!inStorage) continue;
+
+        final match = RegExp(r'^([a-zA-Z_]+):\s*(.*)$').firstMatch(trimmed);
+        if (match == null) continue;
+        final key = match.group(1);
+        final value = match.group(2)?.trim();
+        if (key == 'mode') {
+          if (value?.toLowerCase() == 'api') mode = StorageMode.api;
+        } else if (key == 'api_url') {
+          apiUrl = value;
+        }
+      }
+
+      if (mode == StorageMode.api && (apiUrl == null || apiUrl!.isEmpty)) {
+        mode = StorageMode.local;
+      }
+
+      return StorageConfig(mode: mode, apiUrl: apiUrl);
+    } catch (_) {
+      return StorageConfig(mode: StorageMode.local);
+    }
   }
 }
 
@@ -291,6 +371,7 @@ class LandingPage extends StatelessWidget {
                         ),
                       ),
                       onPressed: () {
+                        data.reset();
                         Navigator.push(
                           context,
                           MaterialPageRoute(
@@ -1061,17 +1142,46 @@ class FrequencyPage extends StatelessWidget {
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
                 ),
                 onPressed: () async {
-                  await data.save();
-                  if (context.mounted) {
+                  final config = await StorageConfig.load();
+                  try {
+                    if (config.mode == StorageMode.api && config.apiUrl != null && config.apiUrl!.isNotEmpty) {
+                      await data.sendToApi(config.apiUrl!);
+                      if (!context.mounted) return;
+                      showDialog(
+                        context: context,
+                        builder: (_) => AlertDialog(
+                          title: const Text("Sent ✅"),
+                          content: Text("Profile posted to API: ${config.apiUrl}"),
+                          actions: [
+                            TextButton(onPressed: () => Navigator.pop(context), child: const Text("OK")),
+                          ],
+                        ),
+                      );
+                    } else {
+                      await data.save();
+                      if (!context.mounted) return;
+                      showDialog(
+                        context: context,
+                        builder: (_) => AlertDialog(
+                          title: const Text("Saved ✅"),
+                          content: const Text(
+                            "Saved locally as JSON in app documents storage:\nfoodadvisor_profile.json",
+                          ),
+                          actions: [
+                            TextButton(onPressed: () => Navigator.pop(context), child: const Text("OK")),
+                          ],
+                        ),
+                      );
+                    }
+                  } catch (e) {
+                    if (!context.mounted) return;
                     showDialog(
                       context: context,
                       builder: (_) => AlertDialog(
-                        title: const Text("Saved ✅"),
-                        content: const Text(
-                          "Saved locally as JSON in app documents storage:\nfoodadvisor_profile.json",
-                        ),
+                        title: const Text("Error"),
+                        content: Text('Could not submit profile: $e'),
                         actions: [
-                          TextButton(onPressed: () => Navigator.pop(context), child: const Text("OK")),
+                          TextButton(onPressed: () => Navigator.pop(context), child: const Text("Close")),
                         ],
                       ),
                     );
