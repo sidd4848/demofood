@@ -1,0 +1,6 @@
+storage:
+  backend: local
+  local_path: data
+model:
+  model_name: Qwen/Qwen2.5-7B-Instruct
+  local_files_only: false
