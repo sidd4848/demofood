@@ -1,0 +1,47 @@
+{
+  "profile": {
+    "name": "asass",
+    "gender": "Male",
+    "age": 25,
+    "heightCm": 170.0,
+    "weightKg": 70.0,
+    "bodyFatPct": null,
+    "visceralFatPct": null
+  },
+  "preferences": {
+    "dietType": "nonveg",
+    "nonVegItems": [
+      "Chicken",
+      "Eggs",
+      "Lamb",
+      "Seafood"
+    ],
+    "cuisines": [
+      "Japanese",
+      "Italian",
+      "Indian",
+      "Chinese"
+    ],
+    "allergies": [
+      "Peanuts",
+      "Gluten"
+    ],
+    "healthSymptoms": []
+  },
+  "frequency": {
+    "Lamb": {
+      "mode": "monthly",
+      "weekdays": null
+    },
+    "Seafood": {
+      "mode": "weekdays",
+      "weekdays": [
+        1,
+        3,
+        5
+      ]
+    }
+  },
+  "jobId": "job_1767413441508_e75653",
+  "submittedAt": "2026-01-03T04:10:41.508637Z"
+}
