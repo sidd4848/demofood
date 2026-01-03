@@ -2,4 +2,6 @@ storage:
   # mode: local | api
   mode: local
   # api_url is used when mode: api
-  api_url: http://localhost:8000/profile
+  # - Android emulator: http://10.0.2.2:8000/<path>
+  # - Physical device/iOS simulator: http://<your-computer-LAN-IP>:8000/<path>
+  api_url: http://10.0.2.2:8000/profile

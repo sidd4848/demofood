@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
@@ -141,6 +143,18 @@ class AppData extends ChangeNotifier {
         "frequency": frequency,
       };
 
+  Map<String, dynamic> buildSubmissionPayload() {
+    final now = DateTime.now().toUtc();
+    final randomHex = Random.secure().nextInt(0xFFFFFF).toRadixString(16).padLeft(6, '0');
+    final jobId = 'job_${now.millisecondsSinceEpoch}_$randomHex';
+
+    return {
+      ...toJson(),
+      'jobId': jobId,
+      'submittedAt': now.toIso8601String(),
+    };
+  }
+
   void fromJson(Map<String, dynamic> j) {
     final p = (j["profile"] ?? {}) as Map<String, dynamic>;
     name = (p["name"] ?? "") as String;
@@ -183,15 +197,80 @@ class AppData extends ChangeNotifier {
     return File("${dir.path}/foodadvisor_profile.json");
   }
 
-  Future<void> save() async {
+  Future<void> save({Map<String, dynamic>? payload}) async {
     final f = await _profileFile();
-    await f.writeAsString(jsonEncode(toJson()));
+    final body = payload ?? buildSubmissionPayload();
+    await f.writeAsString(jsonEncode(body));
+  }
+
+  String _normalizeApiUrl(String apiUrl) {
+    try {
+      final uri = Uri.parse(apiUrl);
+      if (kIsWeb || !Platform.isAndroid) return apiUrl;
+      if (uri.host == 'localhost' || uri.host == '127.0.0.1') {
+        return uri.replace(host: '10.0.2.2').toString();
+      }
+      return apiUrl;
+    } catch (_) {
+      return apiUrl;
+    }
+  }
+
+  Future<void> sendToApi(String apiUrl, {Map<String, dynamic>? payload}) async {
+    final normalizedUrl = _normalizeApiUrl(apiUrl);
+    final client = HttpClient();
+    final body = payload ?? buildSubmissionPayload();
+    try {
+      final req = await client.postUrl(Uri.parse(normalizedUrl));
+      req.headers.contentType = ContentType.json;
+      req.write(jsonEncode(body));
+      final resp = await req.close();
+      if (resp.statusCode < 200 || resp.statusCode >= 300) {
+        final body = await resp.transform(utf8.decoder).join();
+        throw HttpException('Failed (${resp.statusCode}): $body');
+      }
+    } on SocketException catch (e) {
+      throw SocketException('Connection to $normalizedUrl failed: ${e.message}');
+    } finally {
+      client.close();
+    }
+  }
+
+  Future<void> verifyApiReachable(String apiUrl) async {
+    final normalizedUrl = _normalizeApiUrl(apiUrl);
+    final uri = Uri.parse(normalizedUrl);
+    final port = uri.hasPort
+        ? uri.port
+        : uri.scheme.toLowerCase() == 'https'
+            ? 443
+            : 80;
+
+    try {
+      final socket = await Socket.connect(uri.host, port, timeout: const Duration(seconds: 4));
+      await socket.close();
+    } on SocketException catch (e) {
+      throw SocketException('Could not reach $normalizedUrl — ${e.message}\nIf you are on the Android emulator, use http://10.0.2.2:<port>. If you are on a physical device, use your computer\'s IP.');
+    }
+  }
+
+  String _normalizeApiUrl(String apiUrl) {
+    try {
+      final uri = Uri.parse(apiUrl);
+      if (kIsWeb || !Platform.isAndroid) return apiUrl;
+      if (uri.host == 'localhost' || uri.host == '127.0.0.1') {
+        return uri.replace(host: '10.0.2.2').toString();
+      }
+      return apiUrl;
+    } catch (_) {
+      return apiUrl;
+    }
   }
 
   Future<void> sendToApi(String apiUrl) async {
+    final normalizedUrl = _normalizeApiUrl(apiUrl);
     final client = HttpClient();
     try {
-      final req = await client.postUrl(Uri.parse(apiUrl));
+      final req = await client.postUrl(Uri.parse(normalizedUrl));
       req.headers.contentType = ContentType.json;
       req.write(jsonEncode(toJson()));
       final resp = await req.close();
@@ -199,8 +278,27 @@ class AppData extends ChangeNotifier {
         final body = await resp.transform(utf8.decoder).join();
         throw HttpException('Failed (${resp.statusCode}): $body');
       }
+    } on SocketException catch (e) {
+      throw SocketException('Connection to $normalizedUrl failed: ${e.message}');
     } finally {
       client.close();
+    }
+  }
+
+  Future<void> verifyApiReachable(String apiUrl) async {
+    final normalizedUrl = _normalizeApiUrl(apiUrl);
+    final uri = Uri.parse(normalizedUrl);
+    final port = uri.hasPort
+        ? uri.port
+        : uri.scheme.toLowerCase() == 'https'
+            ? 443
+            : 80;
+
+    try {
+      final socket = await Socket.connect(uri.host, port, timeout: const Duration(seconds: 4));
+      await socket.close();
+    } on SocketException catch (e) {
+      throw SocketException('Could not reach $normalizedUrl — ${e.message}\nIf you are on the Android emulator, use http://10.0.2.2:<port>. If you are on a physical device, use your computer\'s IP.');
     }
   }
 
@@ -1135,6 +1233,53 @@ class FrequencyPage extends StatelessWidget {
               ...items.map((item) => _FrequencyCard(data: data, item: item)).toList(),
 
               const SizedBox(height: 20),
+              FutureBuilder<StorageConfig>(
+                future: StorageConfig.load(),
+                builder: (context, snapshot) {
+                  final config = snapshot.data;
+                  if (config == null || config.mode != StorageMode.api || config.apiUrl == null || config.apiUrl!.isEmpty) {
+                    return const SizedBox.shrink();
+                  }
+
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 12),
+                    child: OutlinedButton.icon(
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 12),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                      ),
+                      icon: const Icon(Icons.wifi_tethering_rounded),
+                      label: Text('Test API connection (${data._normalizeApiUrl(config.apiUrl!)})'),
+                      onPressed: () async {
+                        try {
+                          await data.verifyApiReachable(config.apiUrl!);
+                          if (!context.mounted) return;
+                          showDialog(
+                            context: context,
+                            builder: (_) => const AlertDialog(
+                              title: Text('API reachable ✅'),
+                              content: Text('Your FastAPI endpoint accepted a socket connection.'),
+                            ),
+                          );
+                        } catch (e) {
+                          if (!context.mounted) return;
+                          showDialog(
+                            context: context,
+                            builder: (_) => AlertDialog(
+                              title: const Text('API unreachable'),
+                              content: Text('$e'),
+                              actions: [
+                                TextButton(onPressed: () => Navigator.pop(context), child: const Text('Close')),
+                              ],
+                            ),
+                          );
+                        }
+                      },
+                    ),
+                  );
+                },
+              ),
+
               FilledButton(
                 style: FilledButton.styleFrom(
                   backgroundColor: kPrimary,
@@ -1142,31 +1287,49 @@ class FrequencyPage extends StatelessWidget {
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
                 ),
                 onPressed: () async {
+                  final submission = data.buildSubmissionPayload();
                   final config = await StorageConfig.load();
                   try {
                     if (config.mode == StorageMode.api && config.apiUrl != null && config.apiUrl!.isNotEmpty) {
-                      await data.sendToApi(config.apiUrl!);
+                      final targetUrl = data._normalizeApiUrl(config.apiUrl!);
+                      await data.sendToApi(config.apiUrl!, payload: submission);
                       if (!context.mounted) return;
+                      final jobId = submission['jobId'];
+                      final submittedAt = submission['submittedAt'];
+                      final details = [
+                        if (jobId is String && jobId.isNotEmpty) 'Job ID: $jobId',
+                        if (submittedAt is String && submittedAt.isNotEmpty) 'Submitted at: $submittedAt',
+                      ].join('\n');
                       showDialog(
                         context: context,
                         builder: (_) => AlertDialog(
                           title: const Text("Sent ✅"),
-                          content: Text("Profile posted to API: ${config.apiUrl}"),
+                          content: Text([
+                            "Profile posted to API: $targetUrl",
+                            if (details.isNotEmpty) details,
+                          ].join('\n')),
                           actions: [
                             TextButton(onPressed: () => Navigator.pop(context), child: const Text("OK")),
                           ],
                         ),
                       );
                     } else {
-                      await data.save();
+                      await data.save(payload: submission);
                       if (!context.mounted) return;
+                      final jobId = submission['jobId'];
+                      final submittedAt = submission['submittedAt'];
+                      final details = [
+                        if (jobId is String && jobId.isNotEmpty) 'Job ID: $jobId',
+                        if (submittedAt is String && submittedAt.isNotEmpty) 'Saved at: $submittedAt',
+                      ].join('\n');
                       showDialog(
                         context: context,
                         builder: (_) => AlertDialog(
                           title: const Text("Saved ✅"),
-                          content: const Text(
+                          content: Text([
                             "Saved locally as JSON in app documents storage:\nfoodadvisor_profile.json",
-                          ),
+                            if (details.isNotEmpty) details,
+                          ].join('\n')),
                           actions: [
                             TextButton(onPressed: () => Navigator.pop(context), child: const Text("OK")),
                           ],
