@@ -13,8 +13,23 @@ source .venv/bin/activate
 pip install -r backend_foodapi/requirements.txt
 ```
 
-You can control where user detail payloads are persisted via `backend_foodapi/storage.yaml`. The default configuration
-uses local storage and writes JSON payloads to `backend_foodapi/data/`.
+You can control where user detail payloads are persisted and which model is loaded via `backend_foodapi/storage.yaml`.
+The default configuration uses local storage and writes JSON payloads to `backend_foodapi/data/`.
+
+```yaml
+storage:
+  backend: local
+  local_path: data
+model:
+  model_name: Qwen/Qwen2.5-7B-Instruct
+  local_files_only: false
+```
+
+**Reducing model download latency**
+
+- Swap in a lighter model (for example `Qwen/Qwen1.5-0.5B-Chat` or `Qwen/Qwen1.5-1.8B-Chat`) by editing `model.model_name`.
+- If you have already cached the model locally, set `model.local_files_only: true` to force a cache-only load and avoid
+  remote downloads.
 
 ## Running the server
 
