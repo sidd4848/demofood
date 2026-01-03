@@ -65,6 +65,13 @@ class StorageSettings(BaseModel):
     local_path: Path = Field(default_factory=lambda: Path("data"))
 
 
+class ModelSettings(BaseModel):
+    """Configuration for the causal language model used for plan generation."""
+
+    model_name: str = "Qwen/Qwen2.5-7B-Instruct"
+    local_files_only: bool = False
+
+
 class LocalStorage:
     """Persist user detail payloads to the local filesystem."""
 
@@ -84,14 +91,31 @@ class LocalStorage:
         return json.loads(target.read_text())
 
 
-def load_storage_settings(config_path: Path) -> StorageSettings:
+class AppSettings(BaseModel):
+    storage: StorageSettings = Field(default_factory=StorageSettings)
+    model: ModelSettings = Field(default_factory=ModelSettings)
+
+
+def load_app_settings(config_path: Path) -> AppSettings:
+    """Load application settings from YAML with legacy support.
+
+    Historically the configuration only contained storage keys. If the loaded
+    YAML resembles the legacy structure, we map it into the new AppSettings
+    shape to preserve backwards compatibility.
+    """
+
     if not config_path.exists():
-        return StorageSettings()
+        return AppSettings()
 
     with config_path.open("r", encoding="utf-8") as config_file:
         raw_config = yaml.safe_load(config_file) or {}
 
-    return StorageSettings(**raw_config)
+    # Legacy: storage keys at the root of the YAML
+    legacy_storage_keys = {"backend", "local_path"}
+    if legacy_storage_keys & set(raw_config.keys()):
+        return AppSettings(storage=StorageSettings(**raw_config))
+
+    return AppSettings(**raw_config)
 
 
 class DietPlanResponse(BaseModel):
@@ -104,8 +128,8 @@ class DietPlanResponse(BaseModel):
 class DietPlanGenerator:
     """Generate structured diet plans using a causal language model."""
 
-    def __init__(self, model_name: str = "Qwen/Qwen2.5-7B-Instruct") -> None:
-        self.model_name = model_name
+    def __init__(self, settings: Optional[ModelSettings] = None) -> None:
+        self.settings = settings or ModelSettings()
         self._tokenizer: Optional[AutoTokenizer] = None
         self._model: Optional[AutoModelForCausalLM] = None
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -113,14 +137,21 @@ class DietPlanGenerator:
     @property
     def tokenizer(self) -> AutoTokenizer:
         if self._tokenizer is None:
-            self._tokenizer = AutoTokenizer.from_pretrained(self.model_name)
+            self._tokenizer = AutoTokenizer.from_pretrained(
+                self.settings.model_name,
+                local_files_only=self.settings.local_files_only,
+            )
         return self._tokenizer
 
     @property
     def model(self) -> AutoModelForCausalLM:
         if self._model is None:
             model_kwargs = {"device_map": "auto"} if torch.cuda.is_available() else {}
-            self._model = AutoModelForCausalLM.from_pretrained(self.model_name, **model_kwargs)
+            self._model = AutoModelForCausalLM.from_pretrained(
+                self.settings.model_name,
+                local_files_only=self.settings.local_files_only,
+                **model_kwargs,
+            )
             if not torch.cuda.is_available():
                 self._model = self._model.to(self.device)
         return self._model
@@ -164,9 +195,9 @@ class DietPlanGenerator:
 
 
 CONFIG_PATH = Path(__file__).with_name("storage.yaml")
-storage_settings = load_storage_settings(CONFIG_PATH)
-storage_backend = LocalStorage(storage_settings.local_path)
-plan_generator = DietPlanGenerator()
+app_settings = load_app_settings(CONFIG_PATH)
+storage_backend = LocalStorage(app_settings.storage.local_path)
+plan_generator = DietPlanGenerator(app_settings.model)
 
 
 app = FastAPI(title="DemoFood API")
