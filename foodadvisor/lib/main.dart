@@ -203,111 +203,62 @@ class AppData extends ChangeNotifier {
     await f.writeAsString(jsonEncode(body));
   }
 
-  String _normalizeApiUrl(String apiUrl) {
-    try {
-      final uri = Uri.parse(apiUrl);
-      if (kIsWeb || !Platform.isAndroid) return apiUrl;
-      if (uri.host == 'localhost' || uri.host == '127.0.0.1') {
-        return uri.replace(host: '10.0.2.2').toString();
-      }
-      return apiUrl;
-    } catch (_) {
-      return apiUrl;
-    }
-  }
-
-  Future<void> sendToApi(String apiUrl, {Map<String, dynamic>? payload}) async {
-    final normalizedUrl = _normalizeApiUrl(apiUrl);
-    final client = HttpClient();
-    final body = payload ?? buildSubmissionPayload();
-    try {
-      final req = await client.postUrl(Uri.parse(normalizedUrl));
-      req.headers.contentType = ContentType.json;
-      req.write(jsonEncode(body));
-      final resp = await req.close();
-      if (resp.statusCode < 200 || resp.statusCode >= 300) {
-        final body = await resp.transform(utf8.decoder).join();
-        throw HttpException('Failed (${resp.statusCode}): $body');
-      }
-    } on SocketException catch (e) {
-      throw SocketException('Connection to $normalizedUrl failed: ${e.message}');
-    } finally {
-      client.close();
-    }
-  }
-
-  Future<void> verifyApiReachable(String apiUrl) async {
-    final normalizedUrl = _normalizeApiUrl(apiUrl);
-    final uri = Uri.parse(normalizedUrl);
-    final port = uri.hasPort
-        ? uri.port
-        : uri.scheme.toLowerCase() == 'https'
-            ? 443
-            : 80;
-
-    try {
-      final socket = await Socket.connect(uri.host, port, timeout: const Duration(seconds: 4));
-      await socket.close();
-    } on SocketException catch (e) {
-      throw SocketException('Could not reach $normalizedUrl — ${e.message}\nIf you are on the Android emulator, use http://10.0.2.2:<port>. If you are on a physical device, use your computer\'s IP.');
-    }
-  }
-
-  String _normalizeApiUrl(String apiUrl) {
-    try {
-      final uri = Uri.parse(apiUrl);
-      if (kIsWeb || !Platform.isAndroid) return apiUrl;
-      if (uri.host == 'localhost' || uri.host == '127.0.0.1') {
-        return uri.replace(host: '10.0.2.2').toString();
-      }
-      return apiUrl;
-    } catch (_) {
-      return apiUrl;
-    }
-  }
-
-  Future<void> sendToApi(String apiUrl) async {
-    final normalizedUrl = _normalizeApiUrl(apiUrl);
-    final client = HttpClient();
-    try {
-      final req = await client.postUrl(Uri.parse(normalizedUrl));
-      req.headers.contentType = ContentType.json;
-      req.write(jsonEncode(toJson()));
-      final resp = await req.close();
-      if (resp.statusCode < 200 || resp.statusCode >= 300) {
-        final body = await resp.transform(utf8.decoder).join();
-        throw HttpException('Failed (${resp.statusCode}): $body');
-      }
-    } on SocketException catch (e) {
-      throw SocketException('Connection to $normalizedUrl failed: ${e.message}');
-    } finally {
-      client.close();
-    }
-  }
-
-  Future<void> verifyApiReachable(String apiUrl) async {
-    final normalizedUrl = _normalizeApiUrl(apiUrl);
-    final uri = Uri.parse(normalizedUrl);
-    final port = uri.hasPort
-        ? uri.port
-        : uri.scheme.toLowerCase() == 'https'
-            ? 443
-            : 80;
-
-    try {
-      final socket = await Socket.connect(uri.host, port, timeout: const Duration(seconds: 4));
-      await socket.close();
-    } on SocketException catch (e) {
-      throw SocketException('Could not reach $normalizedUrl — ${e.message}\nIf you are on the Android emulator, use http://10.0.2.2:<port>. If you are on a physical device, use your computer\'s IP.');
-    }
-  }
-
   Future<bool> loadIfExists() async {
     final f = await _profileFile();
     if (!await f.exists()) return false;
     final txt = await f.readAsString();
     fromJson(jsonDecode(txt) as Map<String, dynamic>);
     return true;
+  }
+}
+
+String normalizeApiUrl(String apiUrl) {
+  try {
+    final uri = Uri.parse(apiUrl);
+    if (kIsWeb || !Platform.isAndroid) return apiUrl;
+    if (uri.host == 'localhost' || uri.host == '127.0.0.1') {
+      return uri.replace(host: '10.0.2.2').toString();
+    }
+    return apiUrl;
+  } catch (_) {
+    return apiUrl;
+  }
+}
+
+Future<void> verifyApiReachable(String apiUrl) async {
+  final normalizedUrl = normalizeApiUrl(apiUrl);
+  final uri = Uri.parse(normalizedUrl);
+  final port = uri.hasPort
+      ? uri.port
+      : uri.scheme.toLowerCase() == 'https'
+          ? 443
+          : 80;
+
+  try {
+    final socket = await Socket.connect(uri.host, port, timeout: const Duration(seconds: 4));
+    await socket.close();
+  } on SocketException catch (e) {
+    throw SocketException('Could not reach $normalizedUrl — ${e.message}\nIf you are on the Android emulator, use http://10.0.2.2:<port>. If you are on a physical device, use your computer\'s IP.');
+  }
+}
+
+Future<void> sendToApi(AppData data, String apiUrl, {Map<String, dynamic>? payload}) async {
+  final normalizedUrl = normalizeApiUrl(apiUrl);
+  final client = HttpClient();
+  final body = payload ?? data.buildSubmissionPayload();
+  try {
+    final req = await client.postUrl(Uri.parse(normalizedUrl));
+    req.headers.contentType = ContentType.json;
+    req.write(jsonEncode(body));
+    final resp = await req.close();
+    if (resp.statusCode < 200 || resp.statusCode >= 300) {
+      final body = await resp.transform(utf8.decoder).join();
+      throw HttpException('Failed (${resp.statusCode}): $body');
+    }
+  } on SocketException catch (e) {
+    throw SocketException('Connection to $normalizedUrl failed: ${e.message}');
+  } finally {
+    client.close();
   }
 }
 
@@ -1249,10 +1200,10 @@ class FrequencyPage extends StatelessWidget {
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                       ),
                       icon: const Icon(Icons.wifi_tethering_rounded),
-                      label: Text('Test API connection (${data._normalizeApiUrl(config.apiUrl!)})'),
+                      label: Text('Test API connection (${normalizeApiUrl(config.apiUrl!)})'),
                       onPressed: () async {
                         try {
-                          await data.verifyApiReachable(config.apiUrl!);
+                          await verifyApiReachable(config.apiUrl!);
                           if (!context.mounted) return;
                           showDialog(
                             context: context,
@@ -1291,8 +1242,8 @@ class FrequencyPage extends StatelessWidget {
                   final config = await StorageConfig.load();
                   try {
                     if (config.mode == StorageMode.api && config.apiUrl != null && config.apiUrl!.isNotEmpty) {
-                      final targetUrl = data._normalizeApiUrl(config.apiUrl!);
-                      await data.sendToApi(config.apiUrl!, payload: submission);
+                      final targetUrl = normalizeApiUrl(config.apiUrl!);
+                      await sendToApi(data, config.apiUrl!, payload: submission);
                       if (!context.mounted) return;
                       final jobId = submission['jobId'];
                       final submittedAt = submission['submittedAt'];
