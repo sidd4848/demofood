@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -142,6 +143,18 @@ class AppData extends ChangeNotifier {
         "frequency": frequency,
       };
 
+  Map<String, dynamic> buildSubmissionPayload() {
+    final now = DateTime.now().toUtc();
+    final randomHex = Random.secure().nextInt(0xFFFFFF).toRadixString(16).padLeft(6, '0');
+    final jobId = 'job_${now.millisecondsSinceEpoch}_$randomHex';
+
+    return {
+      ...toJson(),
+      'jobId': jobId,
+      'submittedAt': now.toIso8601String(),
+    };
+  }
+
   void fromJson(Map<String, dynamic> j) {
     final p = (j["profile"] ?? {}) as Map<String, dynamic>;
     name = (p["name"] ?? "") as String;
@@ -184,9 +197,60 @@ class AppData extends ChangeNotifier {
     return File("${dir.path}/foodadvisor_profile.json");
   }
 
-  Future<void> save() async {
+  Future<void> save({Map<String, dynamic>? payload}) async {
     final f = await _profileFile();
-    await f.writeAsString(jsonEncode(toJson()));
+    final body = payload ?? buildSubmissionPayload();
+    await f.writeAsString(jsonEncode(body));
+  }
+
+  String _normalizeApiUrl(String apiUrl) {
+    try {
+      final uri = Uri.parse(apiUrl);
+      if (kIsWeb || !Platform.isAndroid) return apiUrl;
+      if (uri.host == 'localhost' || uri.host == '127.0.0.1') {
+        return uri.replace(host: '10.0.2.2').toString();
+      }
+      return apiUrl;
+    } catch (_) {
+      return apiUrl;
+    }
+  }
+
+  Future<void> sendToApi(String apiUrl, {Map<String, dynamic>? payload}) async {
+    final normalizedUrl = _normalizeApiUrl(apiUrl);
+    final client = HttpClient();
+    final body = payload ?? buildSubmissionPayload();
+    try {
+      final req = await client.postUrl(Uri.parse(normalizedUrl));
+      req.headers.contentType = ContentType.json;
+      req.write(jsonEncode(body));
+      final resp = await req.close();
+      if (resp.statusCode < 200 || resp.statusCode >= 300) {
+        final body = await resp.transform(utf8.decoder).join();
+        throw HttpException('Failed (${resp.statusCode}): $body');
+      }
+    } on SocketException catch (e) {
+      throw SocketException('Connection to $normalizedUrl failed: ${e.message}');
+    } finally {
+      client.close();
+    }
+  }
+
+  Future<void> verifyApiReachable(String apiUrl) async {
+    final normalizedUrl = _normalizeApiUrl(apiUrl);
+    final uri = Uri.parse(normalizedUrl);
+    final port = uri.hasPort
+        ? uri.port
+        : uri.scheme.toLowerCase() == 'https'
+            ? 443
+            : 80;
+
+    try {
+      final socket = await Socket.connect(uri.host, port, timeout: const Duration(seconds: 4));
+      await socket.close();
+    } on SocketException catch (e) {
+      throw SocketException('Could not reach $normalizedUrl — ${e.message}\nIf you are on the Android emulator, use http://10.0.2.2:<port>. If you are on a physical device, use your computer\'s IP.');
+    }
   }
 
   String _normalizeApiUrl(String apiUrl) {
@@ -1223,32 +1287,49 @@ class FrequencyPage extends StatelessWidget {
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
                 ),
                 onPressed: () async {
+                  final submission = data.buildSubmissionPayload();
                   final config = await StorageConfig.load();
                   try {
                     if (config.mode == StorageMode.api && config.apiUrl != null && config.apiUrl!.isNotEmpty) {
                       final targetUrl = data._normalizeApiUrl(config.apiUrl!);
-                      await data.sendToApi(config.apiUrl!);
+                      await data.sendToApi(config.apiUrl!, payload: submission);
                       if (!context.mounted) return;
+                      final jobId = submission['jobId'];
+                      final submittedAt = submission['submittedAt'];
+                      final details = [
+                        if (jobId is String && jobId.isNotEmpty) 'Job ID: $jobId',
+                        if (submittedAt is String && submittedAt.isNotEmpty) 'Submitted at: $submittedAt',
+                      ].join('\n');
                       showDialog(
                         context: context,
                         builder: (_) => AlertDialog(
                           title: const Text("Sent ✅"),
-                          content: Text("Profile posted to API: $targetUrl"),
+                          content: Text([
+                            "Profile posted to API: $targetUrl",
+                            if (details.isNotEmpty) details,
+                          ].join('\n')),
                           actions: [
                             TextButton(onPressed: () => Navigator.pop(context), child: const Text("OK")),
                           ],
                         ),
                       );
                     } else {
-                      await data.save();
+                      await data.save(payload: submission);
                       if (!context.mounted) return;
+                      final jobId = submission['jobId'];
+                      final submittedAt = submission['submittedAt'];
+                      final details = [
+                        if (jobId is String && jobId.isNotEmpty) 'Job ID: $jobId',
+                        if (submittedAt is String && submittedAt.isNotEmpty) 'Saved at: $submittedAt',
+                      ].join('\n');
                       showDialog(
                         context: context,
                         builder: (_) => AlertDialog(
                           title: const Text("Saved ✅"),
-                          content: const Text(
+                          content: Text([
                             "Saved locally as JSON in app documents storage:\nfoodadvisor_profile.json",
-                          ),
+                            if (details.isNotEmpty) details,
+                          ].join('\n')),
                           actions: [
                             TextButton(onPressed: () => Navigator.pop(context), child: const Text("OK")),
                           ],
