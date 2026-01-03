@@ -253,6 +253,55 @@ class AppData extends ChangeNotifier {
     }
   }
 
+  String _normalizeApiUrl(String apiUrl) {
+    try {
+      final uri = Uri.parse(apiUrl);
+      if (kIsWeb || !Platform.isAndroid) return apiUrl;
+      if (uri.host == 'localhost' || uri.host == '127.0.0.1') {
+        return uri.replace(host: '10.0.2.2').toString();
+      }
+      return apiUrl;
+    } catch (_) {
+      return apiUrl;
+    }
+  }
+
+  Future<void> sendToApi(String apiUrl) async {
+    final normalizedUrl = _normalizeApiUrl(apiUrl);
+    final client = HttpClient();
+    try {
+      final req = await client.postUrl(Uri.parse(normalizedUrl));
+      req.headers.contentType = ContentType.json;
+      req.write(jsonEncode(toJson()));
+      final resp = await req.close();
+      if (resp.statusCode < 200 || resp.statusCode >= 300) {
+        final body = await resp.transform(utf8.decoder).join();
+        throw HttpException('Failed (${resp.statusCode}): $body');
+      }
+    } on SocketException catch (e) {
+      throw SocketException('Connection to $normalizedUrl failed: ${e.message}');
+    } finally {
+      client.close();
+    }
+  }
+
+  Future<void> verifyApiReachable(String apiUrl) async {
+    final normalizedUrl = _normalizeApiUrl(apiUrl);
+    final uri = Uri.parse(normalizedUrl);
+    final port = uri.hasPort
+        ? uri.port
+        : uri.scheme.toLowerCase() == 'https'
+            ? 443
+            : 80;
+
+    try {
+      final socket = await Socket.connect(uri.host, port, timeout: const Duration(seconds: 4));
+      await socket.close();
+    } on SocketException catch (e) {
+      throw SocketException('Could not reach $normalizedUrl — ${e.message}\nIf you are on the Android emulator, use http://10.0.2.2:<port>. If you are on a physical device, use your computer\'s IP.');
+    }
+  }
+
   Future<bool> loadIfExists() async {
     final f = await _profileFile();
     if (!await f.exists()) return false;
