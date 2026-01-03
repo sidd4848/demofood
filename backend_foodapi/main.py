@@ -1,12 +1,46 @@
-from typing import Dict
+from typing import Dict, List, Optional
 
 from fastapi import FastAPI
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
+
+
+class Profile(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    name: str
+    gender: str
+    age: int
+    height_cm: float = Field(..., alias="heightCm")
+    weight_kg: float = Field(..., alias="weightKg")
+    body_fat_pct: Optional[float] = Field(None, alias="bodyFatPct")
+    visceral_fat_pct: Optional[float] = Field(None, alias="visceralFatPct")
+
+
+class Preferences(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    diet_type: str = Field(..., alias="dietType")
+    non_veg_items: Optional[List[str]] = Field(default_factory=list, alias="nonVegItems")
+    cuisines: Optional[List[str]] = None
+    allergies: Optional[List[str]] = None
+    health_symptoms: Optional[List[str]] = Field(None, alias="healthSymptoms")
+
+
+class MealFrequency(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    mode: str
+    weekdays: Optional[List[int]] = None
 
 
 class UserDetailRequest(BaseModel):
-    date: str = Field(description="ISO-8601 date representing when the job runs")
-    job_id: str = Field(description="Identifier for the job associated with the user detail")
+    model_config = ConfigDict(populate_by_name=True)
+
+    profile: Profile
+    preferences: Preferences
+    frequency: Dict[str, MealFrequency] = Field(default_factory=dict)
+    job_id: str = Field(..., alias="jobId")
+    submitted_at: str = Field(..., alias="submittedAt", description="ISO-8601 timestamp when details were submitted")
 
 
 class UserDetailResponse(UserDetailRequest):
@@ -22,7 +56,7 @@ class RecipeResponse(BaseModel):
 app = FastAPI(title="DemoFood API")
 
 
-@app.post("/userdetail", response_model=UserDetailResponse)
+@app.post("/userdetail", response_model=UserDetailResponse, response_model_by_alias=True)
 async def capture_user_detail(payload: UserDetailRequest) -> UserDetailResponse:
     """Accept user detail metadata and echo it back.
 
