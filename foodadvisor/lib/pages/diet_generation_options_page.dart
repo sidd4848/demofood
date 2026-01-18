@@ -5,7 +5,7 @@ import '../services/profile_service.dart';
 import '../theme.dart';
 import 'diet_plan_page.dart';
 
-class DietGenerationOptionsPage extends StatelessWidget {
+class DietGenerationOptionsPage extends StatefulWidget {
   final AppData data;
   final WidgetBuilder preferencesBuilder;
 
@@ -15,14 +15,27 @@ class DietGenerationOptionsPage extends StatelessWidget {
     required this.preferencesBuilder,
   });
 
+  @override
+  State<DietGenerationOptionsPage> createState() => _DietGenerationOptionsPageState();
+}
+
+class _DietGenerationOptionsPageState extends State<DietGenerationOptionsPage> {
+  bool _isSavingSelf = false;
+
   Future<void> _saveChoiceAndOpen(BuildContext context, String generatedBy) async {
+    if (generatedBy == 'self') {
+      setState(() {
+        _isSavingSelf = true;
+      });
+    }
     await saveDietGenerationChoice(generatedBy);
+    if (!mounted) return;
     Navigator.pushReplacement(
       context,
       MaterialPageRoute(
         builder: (_) => DietPlanPage(
-          data: data,
-          preferencesBuilder: preferencesBuilder,
+          data: widget.data,
+          preferencesBuilder: widget.preferencesBuilder,
         ),
       ),
     );
@@ -70,7 +83,8 @@ class DietGenerationOptionsPage extends StatelessWidget {
               description: "Use your own expertise and preferences to guide the plan.",
               icon: Icons.self_improvement_rounded,
               accent: Colors.deepPurple,
-              onTap: () => _saveChoiceAndOpen(context, 'self'),
+              isLoading: _isSavingSelf,
+              onTap: _isSavingSelf ? null : () => _saveChoiceAndOpen(context, 'self'),
             ),
           ],
         ),
@@ -86,6 +100,7 @@ class _OptionCard extends StatelessWidget {
   final Color accent;
   final VoidCallback? onTap;
   final String? disabledLabel;
+  final bool isLoading;
 
   const _OptionCard({
     required this.title,
@@ -94,6 +109,7 @@ class _OptionCard extends StatelessWidget {
     required this.accent,
     required this.onTap,
     this.disabledLabel,
+    this.isLoading = false,
   });
 
   @override
@@ -144,7 +160,16 @@ class _OptionCard extends StatelessWidget {
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                       ),
                       onPressed: onTap,
-                      child: const Text("Continue"),
+                      child: isLoading
+                          ? const SizedBox(
+                              height: 18,
+                              width: 18,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                              ),
+                            )
+                          : const Text("Continue"),
                     ),
             ),
           ],
