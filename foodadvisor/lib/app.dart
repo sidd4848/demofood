@@ -1,272 +1,14 @@
-import 'dart:convert';
-import 'dart:math';
-
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 
-/// -------------------------------
-/// App State (simple + no packages)
-/// -------------------------------
-class AppData extends ChangeNotifier {
-  // Profile
-  String name = "";
-  String gender = "Male";
-  int age = 25;
-  double heightCm = 170;
-  double weightKg = 70;
-  double? bodyFatPct; // optional
-  double? visceralFatPct; // optional
-
-  // Preferences
-  DietType dietType = DietType.veg;
-
-  // Non-veg sub options
-  final Set<String> nonVegItems = {};
-
-  // Up to 5 cuisines
-  final List<String> cuisines = [];
-
-  // Allergies (modern chips)
-  final Set<String> allergies = {};
-
-  // Health symptoms
-  final Set<String> healthSymptoms = {};
-
-  // Frequency: item -> {mode: everyday|weekdays|monthly, weekdays:[0..6]}
-  final Map<String, Map<String, dynamic>> frequency = {};
-
-  void reset() {
-    name = "";
-    gender = "Male";
-    age = 25;
-    heightCm = 170;
-    weightKg = 70;
-    bodyFatPct = null;
-    visceralFatPct = null;
-    dietType = DietType.veg;
-    nonVegItems.clear();
-    cuisines.clear();
-    allergies.clear();
-    healthSymptoms.clear();
-    frequency.clear();
-    notifyListeners();
-  }
-
-  // ---------- cuisine helpers ----------
-  void addCuisine(String c) {
-    if (cuisines.contains(c)) return;
-    if (cuisines.length >= 5) return;
-    cuisines.add(c);
-    notifyListeners();
-  }
-
-  void removeCuisine(String c) {
-    cuisines.remove(c);
-    notifyListeners();
-  }
-
-  // ---------- allergies ----------
-  void toggleAllergy(String a) {
-    if (allergies.contains(a)) {
-      allergies.remove(a);
-    } else {
-      allergies.add(a);
-    }
-    notifyListeners();
-  }
-
-  // ---------- nonveg ----------
-  void toggleNonVeg(String item) {
-    if (nonVegItems.contains(item)) {
-      nonVegItems.remove(item);
-    } else {
-      nonVegItems.add(item);
-    }
-    notifyListeners();
-  }
-
-  // ---------- frequency ----------
-  void setFrequencyMode(String item, String mode) {
-    frequency[item] ??= {};
-    frequency[item]!["mode"] = mode;
-    if (mode != "weekdays") frequency[item]!.remove("weekdays");
-    notifyListeners();
-  }
-
-  void toggleFrequencyWeekday(String item, int dayIdx) {
-    frequency[item] ??= {};
-    frequency[item]!["mode"] = "weekdays";
-    final list = (frequency[item]!["weekdays"] as List?)?.cast<int>() ?? <int>[];
-    if (list.contains(dayIdx)) {
-      list.remove(dayIdx);
-    } else {
-      list.add(dayIdx);
-      list.sort();
-    }
-    frequency[item]!["weekdays"] = list;
-    notifyListeners();
-  }
-
-  // ---------- health symptoms ----------
-  void toggleHealthSymptom(String value) {
-    if (healthSymptoms.contains(value)) {
-      healthSymptoms.remove(value);
-    } else {
-      healthSymptoms.add(value);
-    }
-    notifyListeners();
-  }
-
-  // ---------- JSON ----------
-  Map<String, dynamic> toJson() => {
-        "profile": {
-          "name": name,
-          "gender": gender,
-          "age": age,
-          "heightCm": heightCm,
-          "weightKg": weightKg,
-          "bodyFatPct": bodyFatPct,
-          "visceralFatPct": visceralFatPct,
-        },
-        "preferences": {
-          "dietType": dietType.name,
-          "nonVegItems": nonVegItems.toList(),
-          "cuisines": cuisines,
-          "allergies": allergies.toList(),
-          "healthSymptoms": healthSymptoms.toList(),
-        },
-        "frequency": frequency,
-      };
-
-  Map<String, dynamic> buildSubmissionPayload() {
-    final now = DateTime.now().toUtc();
-    final randomHex = Random.secure().nextInt(0xFFFFFF).toRadixString(16).padLeft(6, '0');
-    final jobId = 'job_${now.millisecondsSinceEpoch}_$randomHex';
-
-    return {
-      ...toJson(),
-      'jobId': jobId,
-      'submittedAt': now.toIso8601String(),
-    };
-  }
-
-  void fromJson(Map<String, dynamic> j) {
-    final p = (j["profile"] ?? {}) as Map<String, dynamic>;
-    name = (p["name"] ?? "") as String;
-    gender = (p["gender"] ?? "Male") as String;
-    age = (p["age"] ?? 25) as int;
-    heightCm = (p["heightCm"] ?? 170).toDouble();
-    weightKg = (p["weightKg"] ?? 70).toDouble();
-    bodyFatPct = (p["bodyFatPct"] == null) ? null : (p["bodyFatPct"] as num).toDouble();
-    visceralFatPct = (p["visceralFatPct"] == null) ? null : (p["visceralFatPct"] as num).toDouble();
-
-    final pref = (j["preferences"] ?? {}) as Map<String, dynamic>;
-    final dt = (pref["dietType"] ?? "veg") as String;
-    dietType = DietType.values.firstWhere((e) => e.name == dt, orElse: () => DietType.veg);
-
-    nonVegItems
-      ..clear()
-      ..addAll(((pref["nonVegItems"] ?? []) as List).cast<String>());
-
-    cuisines
-      ..clear()
-      ..addAll(((pref["cuisines"] ?? []) as List).cast<String>());
-
-    allergies
-      ..clear()
-      ..addAll(((pref["allergies"] ?? []) as List).cast<String>());
-
-    healthSymptoms
-      ..clear()
-      ..addAll(((pref["healthSymptoms"] ?? []) as List).cast<String>());
-
-    frequency
-      ..clear()
-      ..addAll(((j["frequency"] ?? {}) as Map).cast<String, Map<String, dynamic>>());
-
-    notifyListeners();
-  }
-
-}
-
-Future<void> saveProfileToFirebase(AppData data) async {
-  final user = FirebaseAuth.instance.currentUser;
-  if (user == null) {
-    throw StateError('No authenticated user.');
-  }
-  final payload = data.buildSubmissionPayload();
-  final ref = FirebaseFirestore.instance.collection('users').doc(user.uid);
-  await ref.set({
-    'profile': payload,
-    'email': user.email,
-    'displayName': user.displayName,
-    'updatedAt': FieldValue.serverTimestamp(),
-  }, SetOptions(merge: true));
-}
-
-Future<String?> fetchDietPlan() async {
-  final user = FirebaseAuth.instance.currentUser;
-  if (user == null) return null;
-  final snapshot = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
-  if (!snapshot.exists) return null;
-  final value = snapshot.data()?['dietPlan'];
-  if (value == null) return null;
-  if (value is String) return value;
-  return const JsonEncoder.withIndent('  ').convert(value);
-}
-
-/// -------------------------------
-/// Theme (2 colors: warm + healing)
-/// -------------------------------
-const Color kPrimary = Color(0xFFE76F51); // warm coral
-const Color kSecondary = Color(0xFF2A9D8F); // healing teal
-const Color kBg = Color(0xFFFFFBF7); // warm off-white
-const Color kCard = Color(0xFFFFFFFF);
-
-ThemeData buildTheme() {
-  final base = ThemeData(
-    colorScheme: ColorScheme.fromSeed(
-      seedColor: kPrimary,
-      primary: kPrimary,
-      secondary: kSecondary,
-      surface: kCard,
-      background: kBg,
-    ),
-    useMaterial3: true,
-  );
-
-  // IMPORTANT: CardThemeData for older Flutter versions.
-  return base.copyWith(
-    scaffoldBackgroundColor: kBg,
-    appBarTheme: const AppBarTheme(
-      backgroundColor: kBg,
-      elevation: 0,
-      centerTitle: false,
-    ),
-    cardTheme: const CardThemeData(
-      color: kCard,
-      elevation: 0,
-    ),
-    inputDecorationTheme: InputDecorationTheme(
-      filled: true,
-      fillColor: Colors.white,
-      border: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(16),
-        borderSide: BorderSide(color: Colors.grey),
-      ),
-      enabledBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(16),
-        borderSide: BorderSide(color: Colors.grey),
-      ),
-      focusedBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(16),
-        borderSide: const BorderSide(color: kPrimary, width: 1.2),
-      ),
-    ),
-  );
-}
+import 'models/app_data.dart';
+import 'pages/diet_generation_options_page.dart';
+import 'pages/diet_plan_page.dart';
+import 'pages/user_details_page.dart';
+import 'services/profile_service.dart';
+import 'theme.dart';
+import 'widgets/form_widgets.dart';
 
 class FoodAdvisorApp extends StatefulWidget {
   const FoodAdvisorApp({super.key});
@@ -401,7 +143,10 @@ class _SignInCardState extends State<_SignInCard> {
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (_) => UserDetailsPage(data: widget.data),
+        builder: (_) => UserDetailsPage(
+          data: widget.data,
+          nextPageBuilder: (_) => PreferencesPage(data: widget.data),
+        ),
       ),
     );
   }
@@ -410,9 +155,23 @@ class _SignInCardState extends State<_SignInCard> {
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (_) => DietPlanPage(data: widget.data),
+        builder: (_) => DietPlanPage(
+          data: widget.data,
+          preferencesBuilder: (_) => PreferencesPage(data: widget.data),
+        ),
       ),
     );
+  }
+
+  Future<void> _routeAfterSignIn() async {
+    final hasProfile = await hasExistingProfile();
+    if (!mounted) return;
+    if (hasProfile) {
+      _navigateToDietPlan();
+    } else {
+      _showMessage("Welcome! Let's finish setting up your profile.");
+      _navigateToOnboarding(resetData: true);
+    }
   }
 
   String? _validateEmail(String? value) {
@@ -454,7 +213,7 @@ class _SignInCardState extends State<_SignInCard> {
         password: password,
       );
       _showMessage("Signed in successfully.");
-      _navigateToDietPlan();
+      await _routeAfterSignIn();
     } on FirebaseAuthException catch (e) {
       _showMessage(e.message ?? "Unable to sign in. Please try again.");
     } finally {
@@ -508,7 +267,7 @@ class _SignInCardState extends State<_SignInCard> {
       );
       await FirebaseAuth.instance.signInWithCredential(credential);
       _showMessage("Signed in with Google.");
-      _navigateToDietPlan();
+      await _routeAfterSignIn();
     } on FirebaseAuthException catch (e) {
       _showMessage(e.message ?? "Google sign-in failed.");
     } finally {
@@ -614,301 +373,6 @@ class _SignInCardState extends State<_SignInCard> {
   }
 }
 
-class DietPlanPage extends StatefulWidget {
-  final AppData data;
-  const DietPlanPage({super.key, required this.data});
-
-  @override
-  State<DietPlanPage> createState() => _DietPlanPageState();
-}
-
-class _DietPlanPageState extends State<DietPlanPage> {
-  late Future<String?> _dietPlanFuture;
-
-  @override
-  void initState() {
-    super.initState();
-    _dietPlanFuture = fetchDietPlan();
-  }
-
-  void _refreshPlan() {
-    setState(() {
-      _dietPlanFuture = fetchDietPlan();
-    });
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final user = FirebaseAuth.instance.currentUser;
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text("Your diet plan"),
-        actions: [
-          IconButton(
-            tooltip: "Refresh",
-            onPressed: _refreshPlan,
-            icon: const Icon(Icons.refresh_rounded),
-          ),
-        ],
-      ),
-      body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              if (user != null)
-                Text(
-                  "Signed in as ${user.email ?? user.uid}",
-                  style: TextStyle(color: Colors.grey.shade700),
-                ),
-              if (user == null)
-                const Text(
-                  "Please sign in to view your diet plan.",
-                  textAlign: TextAlign.center,
-                ),
-              if (user != null) ...[
-                const SizedBox(height: 16),
-                FutureBuilder<String?>(
-                  future: _dietPlanFuture,
-                  builder: (context, snapshot) {
-                    if (snapshot.connectionState == ConnectionState.waiting) {
-                      return const Center(child: CircularProgressIndicator());
-                    }
-                    if (snapshot.hasError) {
-                      return Text(
-                        "Unable to load diet plan: ${snapshot.error}",
-                        textAlign: TextAlign.center,
-                        style: const TextStyle(color: Colors.redAccent),
-                      );
-                    }
-                    final dietPlan = snapshot.data?.trim();
-                    if (dietPlan == null || dietPlan.isEmpty) {
-                      return const Text(
-                        "diet is generating",
-                        textAlign: TextAlign.center,
-                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
-                      );
-                    }
-                    return Card(
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
-                      child: Padding(
-                        padding: const EdgeInsets.all(16),
-                        child: Text(
-                          dietPlan,
-                          style: const TextStyle(fontSize: 15, height: 1.5),
-                        ),
-                      ),
-                    );
-                  },
-                ),
-                const SizedBox(height: 20),
-                FilledButton.tonal(
-                  style: FilledButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                  ),
-                  onPressed: () {
-                    widget.data.reset();
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (_) => UserDetailsPage(data: widget.data)),
-                    );
-                  },
-                  child: const Text("Update profile"),
-                ),
-              ],
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// -------------------------------
-/// Step 1: User details
-/// -------------------------------
-class UserDetailsPage extends StatefulWidget {
-  final AppData data;
-  const UserDetailsPage({super.key, required this.data});
-
-  @override
-  State<UserDetailsPage> createState() => _UserDetailsPageState();
-}
-
-class _UserDetailsPageState extends State<UserDetailsPage> {
-  final _formKey = GlobalKey<FormState>();
-
-  late final TextEditingController nameC;
-  late final TextEditingController ageC;
-  late final TextEditingController heightC;
-  late final TextEditingController weightC;
-  late final TextEditingController bodyFatC;
-  late final TextEditingController visceralFatC;
-
-  @override
-  void initState() {
-    super.initState();
-    final d = widget.data;
-    nameC = TextEditingController(text: d.name);
-    ageC = TextEditingController(text: d.age.toString());
-    heightC = TextEditingController(text: d.heightCm.toString());
-    weightC = TextEditingController(text: d.weightKg.toString());
-    bodyFatC = TextEditingController(text: d.bodyFatPct?.toString() ?? "");
-    visceralFatC = TextEditingController(text: d.visceralFatPct?.toString() ?? "");
-  }
-
-  @override
-  void dispose() {
-    nameC.dispose();
-    ageC.dispose();
-    heightC.dispose();
-    weightC.dispose();
-    bodyFatC.dispose();
-    visceralFatC.dispose();
-    super.dispose();
-  }
-
-  double? _tryParseDouble(String s) => s.trim().isEmpty ? null : double.tryParse(s.trim());
-  int? _tryParseInt(String s) => int.tryParse(s.trim());
-
-  @override
-  Widget build(BuildContext context) {
-    final d = widget.data;
-
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text("New user details"),
-      ),
-      body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(20),
-          child: Form(
-            key: _formKey,
-            child: ListView(
-              children: [
-                _SectionTitle(
-                  title: "Profile",
-                  subtitle: "This helps personalize food guidance.",
-                ),
-                const SizedBox(height: 12),
-                TextFormField(
-                  controller: nameC,
-                  decoration: const InputDecoration(labelText: "Name"),
-                  validator: (v) => (v == null || v.trim().isEmpty) ? "Please enter your name" : null,
-                ),
-                const SizedBox(height: 12),
-                DropdownButtonFormField<String>(
-                  value: d.gender,
-                  decoration: const InputDecoration(labelText: "Gender"),
-                  items: const [
-                    DropdownMenuItem(value: "Male", child: Text("Male")),
-                    DropdownMenuItem(value: "Female", child: Text("Female")),
-                    DropdownMenuItem(value: "Other", child: Text("Other")),
-                    DropdownMenuItem(value: "Prefer not to say", child: Text("Prefer not to say")),
-                  ],
-                  onChanged: (v) {
-                    if (v == null) return;
-                    d.gender = v;
-                    d.notifyListeners();
-                  },
-                ),
-                const SizedBox(height: 12),
-                _TwoCols(
-                  left: TextFormField(
-                    controller: ageC,
-                    keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(labelText: "Age"),
-                    validator: (v) {
-                      final n = _tryParseInt(v ?? "");
-                      if (n == null || n < 5 || n > 120) return "Enter valid age";
-                      return null;
-                    },
-                  ),
-                  right: TextFormField(
-                    controller: heightC,
-                    keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(labelText: "Height (cm)"),
-                    validator: (v) {
-                      final n = double.tryParse((v ?? "").trim());
-                      if (n == null || n < 80 || n > 250) return "Enter valid height";
-                      return null;
-                    },
-                  ),
-                ),
-                const SizedBox(height: 12),
-                _TwoCols(
-                  left: TextFormField(
-                    controller: weightC,
-                    keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(labelText: "Weight (kg)"),
-                    validator: (v) {
-                      final n = double.tryParse((v ?? "").trim());
-                      if (n == null || n < 20 || n > 300) return "Enter valid weight";
-                      return null;
-                    },
-                  ),
-                  right: TextFormField(
-                    controller: bodyFatC,
-                    keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(labelText: "Body fat % (optional)"),
-                    validator: (v) {
-                      final s = (v ?? "").trim();
-                      if (s.isEmpty) return null;
-                      final n = double.tryParse(s);
-                      if (n == null || n < 2 || n > 70) return "Invalid %";
-                      return null;
-                    },
-                  ),
-                ),
-                const SizedBox(height: 12),
-                TextFormField(
-                  controller: visceralFatC,
-                  keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(labelText: "Visceral fat % (optional)"),
-                  validator: (v) {
-                    final s = (v ?? "").trim();
-                    if (s.isEmpty) return null;
-                    final n = double.tryParse(s);
-                    if (n == null || n < 1 || n > 60) return "Invalid %";
-                    return null;
-                  },
-                ),
-                const SizedBox(height: 18),
-                FilledButton(
-                  style: FilledButton.styleFrom(
-                    backgroundColor: kPrimary,
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
-                  ),
-                  onPressed: () {
-                    if (!_formKey.currentState!.validate()) return;
-
-                    d.name = nameC.text.trim();
-                    d.age = int.parse(ageC.text.trim());
-                    d.heightCm = double.parse(heightC.text.trim());
-                    d.weightKg = double.parse(weightC.text.trim());
-                    d.bodyFatPct = _tryParseDouble(bodyFatC.text);
-                    d.visceralFatPct = _tryParseDouble(visceralFatC.text);
-                    d.notifyListeners();
-
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (_) => PreferencesPage(data: d)),
-                    );
-                  },
-                  child: const Text("Continue"),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
 /// -------------------------------
 /// Step 2: Preferences
 /// Diet + NonVeg items + Cuisines + Allergies + Health Symptoms
@@ -926,7 +390,7 @@ class PreferencesPage extends StatelessWidget {
           padding: const EdgeInsets.all(20),
           child: ListView(
             children: [
-              _SectionTitle(
+              const SectionTitle(
                 title: "Diet type",
                 subtitle: "Choose what best fits you.",
               ),
@@ -941,7 +405,7 @@ class PreferencesPage extends StatelessWidget {
               ],
 
               const SizedBox(height: 18),
-              _SectionTitle(
+              const SectionTitle(
                 title: "Cuisines (up to 5)",
                 subtitle: "Pick favourite cuisines for better suggestions.",
               ),
@@ -949,7 +413,7 @@ class PreferencesPage extends StatelessWidget {
               _CuisineSelector(data: data),
 
               const SizedBox(height: 18),
-              _SectionTitle(
+              const SectionTitle(
                 title: "Allergies",
                 subtitle: "Tap to select. Compact + modern.",
               ),
@@ -957,7 +421,7 @@ class PreferencesPage extends StatelessWidget {
               _AllergySelector(data: data),
 
               const SizedBox(height: 18),
-              _SectionTitle(
+              const SectionTitle(
                 title: "Health symptoms",
                 subtitle: "Select conditions to tailor your diet plan.",
               ),
@@ -984,23 +448,6 @@ class PreferencesPage extends StatelessWidget {
         ),
       ),
     );
-  }
-}
-
-enum DietType { veg, nonveg, eggetarian, pescatarian, vegan }
-
-String dietLabel(DietType d) {
-  switch (d) {
-    case DietType.veg:
-      return "Veg";
-    case DietType.nonveg:
-      return "Non-veg";
-    case DietType.eggetarian:
-      return "Eggetarian";
-    case DietType.pescatarian:
-      return "Pescatarian";
-    case DietType.vegan:
-      return "Vegan";
   }
 }
 
@@ -1374,7 +821,7 @@ class FrequencyPage extends StatelessWidget {
           padding: const EdgeInsets.all(20),
           child: ListView(
             children: [
-              _SectionTitle(
+              const SectionTitle(
                 title: "How often do you prefer these?",
                 subtitle: "Everyday, specific weekdays, or once a month.",
               ),
@@ -1398,7 +845,12 @@ class FrequencyPage extends StatelessWidget {
                     );
                     Navigator.pushReplacement(
                       context,
-                      MaterialPageRoute(builder: (_) => DietPlanPage(data: data)),
+                      MaterialPageRoute(
+                        builder: (_) => DietGenerationOptionsPage(
+                          data: data,
+                          preferencesBuilder: (_) => PreferencesPage(data: data),
+                        ),
+                      ),
                     );
                   } catch (e) {
                     if (!context.mounted) return;
@@ -1553,44 +1005,6 @@ class _SummaryDialog extends StatelessWidget {
       ),
       actions: [
         TextButton(onPressed: () => Navigator.pop(context), child: const Text("Close")),
-      ],
-    );
-  }
-}
-
-/// -------------------------------
-/// Small UI helpers
-/// -------------------------------
-class _SectionTitle extends StatelessWidget {
-  final String title;
-  final String subtitle;
-  const _SectionTitle({required this.title, required this.subtitle});
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(title, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w900)),
-        const SizedBox(height: 6),
-        Text(subtitle, style: TextStyle(color: Colors.grey.shade700, height: 1.25)),
-      ],
-    );
-  }
-}
-
-class _TwoCols extends StatelessWidget {
-  final Widget left;
-  final Widget right;
-  const _TwoCols({required this.left, required this.right});
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Expanded(child: left),
-        const SizedBox(width: 12),
-        Expanded(child: right),
       ],
     );
   }
