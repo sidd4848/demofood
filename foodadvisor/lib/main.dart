@@ -399,7 +399,7 @@ class LandingPage extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       body: SafeArea(
-        child: Padding(
+        child: SingleChildScrollView(
           padding: const EdgeInsets.all(20),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -407,50 +407,37 @@ class LandingPage extends StatelessWidget {
               _PremiumHeader(),
               const SizedBox(height: 18),
               _PremiumHeroCard(),
-              const Spacer(),
-              Row(
+              const SizedBox(height: 20),
+              const Text(
+                "Build a plan that fits your body.",
+                style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                "Save your preferences, track your favorites, and keep your wellness plan synced.",
+                style: TextStyle(color: Colors.grey.shade700, height: 1.4),
+              ),
+              const SizedBox(height: 14),
+              Wrap(
+                spacing: 10,
+                runSpacing: 10,
                 children: [
-                  Expanded(
-                    child: FilledButton(
-                      style: FilledButton.styleFrom(
-                        backgroundColor: kPrimary,
-                        padding: const EdgeInsets.symmetric(vertical: 16),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(18),
-                        ),
-                      ),
-                      onPressed: () {
-                        data.reset();
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => UserDetailsPage(data: data),
-                          ),
-                        );
-                      },
-                      child: const Text("New User"),
-                    ),
+                  Chip(
+                    avatar: const Icon(Icons.favorite_rounded, color: kPrimary),
+                    label: const Text("Smart preferences"),
                   ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: FilledButton.tonal(
-                      style: FilledButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 16),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(18),
-                        ),
-                      ),
-                      onPressed: null, // disabled for now
-                      child: const Text("Existing User"),
-                    ),
+                  Chip(
+                    avatar: const Icon(Icons.soup_kitchen_rounded, color: kPrimary),
+                    label: const Text("Cuisine matching"),
+                  ),
+                  Chip(
+                    avatar: const Icon(Icons.health_and_safety_rounded, color: kPrimary),
+                    label: const Text("Health-first picks"),
                   ),
                 ],
               ),
-              const SizedBox(height: 14),
-              Text(
-                "Existing user login will be enabled soon.",
-                style: TextStyle(color: Colors.grey.shade700),
-              ),
+              const SizedBox(height: 22),
+              _SignInCard(data: data),
             ],
           ),
         ),
@@ -520,6 +507,85 @@ class _PremiumHeroCard extends StatelessWidget {
               ),
               child: const Icon(Icons.favorite_rounded, color: kPrimary, size: 32),
             )
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _SignInCard extends StatelessWidget {
+  final AppData data;
+
+  const _SignInCard({required this.data});
+
+  void _showComingSoon(BuildContext context, String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message)),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
+      child: Padding(
+        padding: const EdgeInsets.all(18),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              "Sign in to FoodAdvisor",
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              "Use email or Google to sync your plan across devices.",
+              style: TextStyle(color: Colors.grey.shade700, height: 1.4),
+            ),
+            const SizedBox(height: 16),
+            FilledButton.icon(
+              style: FilledButton.styleFrom(
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
+                ),
+              ),
+              onPressed: () {
+                data.reset();
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => UserDetailsPage(data: data),
+                  ),
+                );
+              },
+              icon: const Icon(Icons.email_rounded),
+              label: const Text("Continue with Email"),
+            ),
+            const SizedBox(height: 12),
+            OutlinedButton.icon(
+              style: OutlinedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
+                ),
+              ),
+              onPressed: () => _showComingSoon(
+                context,
+                "Google sign-in will be available soon.",
+              ),
+              icon: const Icon(Icons.account_circle_rounded),
+              label: const Text("Continue with Google"),
+            ),
+            const SizedBox(height: 10),
+            TextButton(
+              onPressed: () => _showComingSoon(
+                context,
+                "Existing user login will be enabled soon.",
+              ),
+              child: const Text("Already have an account? Sign in"),
+            ),
           ],
         ),
       ),
