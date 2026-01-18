@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "945368463692",
+    "project_id": "foodadvisor-e2cd0",
+    "storage_bucket": "foodadvisor-e2cd0.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:945368463692:android:b65da6fc08ca89ff1137e9",
+        "android_client_info": {
+          "package_name": "com.example.foodadvisor"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyB2gqFtwxh7xEzah-PT4gkwOPdBYF9qyj8"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
