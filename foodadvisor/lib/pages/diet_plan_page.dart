@@ -251,6 +251,18 @@ class _DietPlanPageState extends State<DietPlanPage> {
                 editablePlan: _editablePlan,
                 deficitController: _selfDeficitController,
                 onUpdate: () => setState(() {}),
+                onUpdateProfile: () {
+                  widget.data.reset();
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => UserDetailsPage(
+                        data: widget.data,
+                        nextPageBuilder: widget.preferencesBuilder,
+                      ),
+                    ),
+                  );
+                },
                 onSave: jobId == null
                     ? null
                     : () async {
@@ -260,6 +272,7 @@ class _DietPlanPageState extends State<DietPlanPage> {
                           calorieDeficit: deficitValue,
                           plan: _editablePlan,
                         );
+                        _refreshPlan();
                       },
               );
             }
@@ -415,12 +428,14 @@ class _SelfPlanEditor extends StatefulWidget {
   final Map<String, String> editablePlan;
   final TextEditingController deficitController;
   final VoidCallback onUpdate;
+  final VoidCallback onUpdateProfile;
   final Future<void> Function()? onSave;
 
   const _SelfPlanEditor({
     required this.editablePlan,
     required this.deficitController,
     required this.onUpdate,
+    required this.onUpdateProfile,
     required this.onSave,
   });
 
@@ -432,7 +447,13 @@ class _SelfPlanEditorState extends State<_SelfPlanEditor> {
   bool _isSaving = false;
 
   Future<void> _handleSave() async {
-    if (widget.onSave == null || _isSaving) return;
+    if (_isSaving) return;
+    if (widget.onSave == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Unable to save yet. Please try again in a moment.")),
+      );
+      return;
+    }
     setState(() {
       _isSaving = true;
     });
@@ -479,6 +500,15 @@ class _SelfPlanEditorState extends State<_SelfPlanEditor> {
         Text(
           "Fill in breakfast, lunch, and dinner for each day.",
           style: TextStyle(color: Colors.grey.shade700),
+        ),
+        const SizedBox(height: 12),
+        Align(
+          alignment: Alignment.centerRight,
+          child: OutlinedButton.icon(
+            onPressed: widget.onUpdateProfile,
+            icon: const Icon(Icons.manage_accounts_outlined),
+            label: const Text("Update details"),
+          ),
         ),
         const SizedBox(height: 16),
         TextField(
@@ -531,7 +561,7 @@ class _SelfPlanEditorState extends State<_SelfPlanEditor> {
         }),
         const SizedBox(height: 16),
         FilledButton(
-          onPressed: widget.onSave == null ? null : _handleSave,
+          onPressed: _handleSave,
           child: _isSaving
               ? const SizedBox(
                   height: 18,
