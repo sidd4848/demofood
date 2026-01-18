@@ -1,12 +1,9 @@
 import 'dart:convert';
-import 'dart:io';
 import 'dart:math';
 
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
-import 'package:path_provider/path_provider.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 
 /// -------------------------------
@@ -192,120 +189,32 @@ class AppData extends ChangeNotifier {
     notifyListeners();
   }
 
-  static Future<File> _profileFile() async {
-    final dir = await getApplicationDocumentsDirectory();
-    return File("${dir.path}/foodadvisor_profile.json");
-  }
-
-  Future<void> save({Map<String, dynamic>? payload}) async {
-    final f = await _profileFile();
-    final body = payload ?? buildSubmissionPayload();
-    await f.writeAsString(jsonEncode(body));
-  }
-
-  Future<bool> loadIfExists() async {
-    final f = await _profileFile();
-    if (!await f.exists()) return false;
-    final txt = await f.readAsString();
-    fromJson(jsonDecode(txt) as Map<String, dynamic>);
-    return true;
-  }
 }
 
-String normalizeApiUrl(String apiUrl) {
-  try {
-    final uri = Uri.parse(apiUrl);
-    if (kIsWeb || !Platform.isAndroid) return apiUrl;
-    if (uri.host == 'localhost' || uri.host == '127.0.0.1') {
-      return uri.replace(host: '10.0.2.2').toString();
-    }
-    return apiUrl;
-  } catch (_) {
-    return apiUrl;
+Future<void> saveProfileToFirebase(AppData data) async {
+  final user = FirebaseAuth.instance.currentUser;
+  if (user == null) {
+    throw StateError('No authenticated user.');
   }
+  final payload = data.buildSubmissionPayload();
+  final ref = FirebaseFirestore.instance.collection('users').doc(user.uid);
+  await ref.set({
+    'profile': payload,
+    'email': user.email,
+    'displayName': user.displayName,
+    'updatedAt': FieldValue.serverTimestamp(),
+  }, SetOptions(merge: true));
 }
 
-Future<void> verifyApiReachable(String apiUrl) async {
-  final normalizedUrl = normalizeApiUrl(apiUrl);
-  final uri = Uri.parse(normalizedUrl);
-  final port = uri.hasPort
-      ? uri.port
-      : uri.scheme.toLowerCase() == 'https'
-          ? 443
-          : 80;
-
-  try {
-    final socket = await Socket.connect(uri.host, port, timeout: const Duration(seconds: 4));
-    await socket.close();
-  } on SocketException catch (e) {
-    throw SocketException('Could not reach $normalizedUrl — ${e.message}\nIf you are on the Android emulator, use http://10.0.2.2:<port>. If you are on a physical device, use your computer\'s IP.');
-  }
-}
-
-Future<void> sendToApi(AppData data, String apiUrl, {Map<String, dynamic>? payload}) async {
-  final normalizedUrl = normalizeApiUrl(apiUrl);
-  final client = HttpClient();
-  final body = payload ?? data.buildSubmissionPayload();
-  try {
-    final req = await client.postUrl(Uri.parse(normalizedUrl));
-    req.headers.contentType = ContentType.json;
-    req.write(jsonEncode(body));
-    final resp = await req.close();
-    if (resp.statusCode < 200 || resp.statusCode >= 300) {
-      final body = await resp.transform(utf8.decoder).join();
-      throw HttpException('Failed (${resp.statusCode}): $body');
-    }
-  } on SocketException catch (e) {
-    throw SocketException('Connection to $normalizedUrl failed: ${e.message}');
-  } finally {
-    client.close();
-  }
-}
-
-enum StorageMode { local, api }
-
-class StorageConfig {
-  final StorageMode mode;
-  final String? apiUrl;
-
-  StorageConfig({required this.mode, this.apiUrl});
-
-  static Future<StorageConfig> load() async {
-    try {
-      final raw = await rootBundle.loadString('assets/storage.yaml');
-      var mode = StorageMode.local;
-      String? apiUrl;
-      var inStorage = false;
-
-      for (final line in raw.split('\n')) {
-        final trimmed = line.trim();
-        if (trimmed.isEmpty || trimmed.startsWith('#')) continue;
-        if (trimmed.startsWith('storage:')) {
-          inStorage = true;
-          continue;
-        }
-        if (!inStorage) continue;
-
-        final match = RegExp(r'^([a-zA-Z_]+):\s*(.*)$').firstMatch(trimmed);
-        if (match == null) continue;
-        final key = match.group(1);
-        final value = match.group(2)?.trim();
-        if (key == 'mode') {
-          if (value?.toLowerCase() == 'api') mode = StorageMode.api;
-        } else if (key == 'api_url') {
-          apiUrl = value;
-        }
-      }
-
-      if (mode == StorageMode.api && (apiUrl == null || apiUrl!.isEmpty)) {
-        mode = StorageMode.local;
-      }
-
-      return StorageConfig(mode: mode, apiUrl: apiUrl);
-    } catch (_) {
-      return StorageConfig(mode: StorageMode.local);
-    }
-  }
+Future<String?> fetchDietPlan() async {
+  final user = FirebaseAuth.instance.currentUser;
+  if (user == null) return null;
+  final snapshot = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
+  if (!snapshot.exists) return null;
+  final value = snapshot.data()?['dietPlan'];
+  if (value == null) return null;
+  if (value is String) return value;
+  return const JsonEncoder.withIndent('  ').convert(value);
 }
 
 /// -------------------------------
@@ -371,8 +280,6 @@ class _FoodAdvisorAppState extends State<FoodAdvisorApp> {
   @override
   void initState() {
     super.initState();
-    // Load locally saved profile if exists (for future "Existing User")
-    data.loadIfExists();
   }
 
   @override
@@ -499,6 +406,15 @@ class _SignInCardState extends State<_SignInCard> {
     );
   }
 
+  void _navigateToDietPlan() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => DietPlanPage(data: widget.data),
+      ),
+    );
+  }
+
   String? _validateEmail(String? value) {
     final text = value?.trim() ?? "";
     if (text.isEmpty) {
@@ -538,7 +454,7 @@ class _SignInCardState extends State<_SignInCard> {
         password: password,
       );
       _showMessage("Signed in successfully.");
-      _navigateToOnboarding(resetData: false);
+      _navigateToDietPlan();
     } on FirebaseAuthException catch (e) {
       _showMessage(e.message ?? "Unable to sign in. Please try again.");
     } finally {
@@ -580,6 +496,9 @@ class _SignInCardState extends State<_SignInCard> {
       final googleUser = await GoogleSignIn().signIn();
       if (googleUser == null) {
         _showMessage("Google sign-in was cancelled.");
+        if (mounted) {
+          setState(() => _isLoading = false);
+        }
         return;
       }
       final googleAuth = await googleUser.authentication;
@@ -589,7 +508,7 @@ class _SignInCardState extends State<_SignInCard> {
       );
       await FirebaseAuth.instance.signInWithCredential(credential);
       _showMessage("Signed in with Google.");
-      _navigateToOnboarding(resetData: false);
+      _navigateToDietPlan();
     } on FirebaseAuthException catch (e) {
       _showMessage(e.message ?? "Google sign-in failed.");
     } finally {
@@ -687,6 +606,118 @@ class _SignInCardState extends State<_SignInCard> {
                 onPressed: _isLoading ? null : _createAccount,
                 child: const Text("New here? Create an account"),
               ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class DietPlanPage extends StatefulWidget {
+  final AppData data;
+  const DietPlanPage({super.key, required this.data});
+
+  @override
+  State<DietPlanPage> createState() => _DietPlanPageState();
+}
+
+class _DietPlanPageState extends State<DietPlanPage> {
+  late Future<String?> _dietPlanFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _dietPlanFuture = fetchDietPlan();
+  }
+
+  void _refreshPlan() {
+    setState(() {
+      _dietPlanFuture = fetchDietPlan();
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final user = FirebaseAuth.instance.currentUser;
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text("Your diet plan"),
+        actions: [
+          IconButton(
+            tooltip: "Refresh",
+            onPressed: _refreshPlan,
+            icon: const Icon(Icons.refresh_rounded),
+          ),
+        ],
+      ),
+      body: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (user != null)
+                Text(
+                  "Signed in as ${user.email ?? user.uid}",
+                  style: TextStyle(color: Colors.grey.shade700),
+                ),
+              if (user == null)
+                const Text(
+                  "Please sign in to view your diet plan.",
+                  textAlign: TextAlign.center,
+                ),
+              if (user != null) ...[
+                const SizedBox(height: 16),
+                FutureBuilder<String?>(
+                  future: _dietPlanFuture,
+                  builder: (context, snapshot) {
+                    if (snapshot.connectionState == ConnectionState.waiting) {
+                      return const Center(child: CircularProgressIndicator());
+                    }
+                    if (snapshot.hasError) {
+                      return Text(
+                        "Unable to load diet plan: ${snapshot.error}",
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(color: Colors.redAccent),
+                      );
+                    }
+                    final dietPlan = snapshot.data?.trim();
+                    if (dietPlan == null || dietPlan.isEmpty) {
+                      return const Text(
+                        "diet is generating",
+                        textAlign: TextAlign.center,
+                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+                      );
+                    }
+                    return Card(
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+                      child: Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: Text(
+                          dietPlan,
+                          style: const TextStyle(fontSize: 15, height: 1.5),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+                const SizedBox(height: 20),
+                FilledButton.tonal(
+                  style: FilledButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                  ),
+                  onPressed: () {
+                    widget.data.reset();
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => UserDetailsPage(data: widget.data)),
+                    );
+                  },
+                  child: const Text("Update profile"),
+                ),
+              ],
             ],
           ),
         ),
@@ -1352,53 +1383,6 @@ class FrequencyPage extends StatelessWidget {
               ...items.map((item) => _FrequencyCard(data: data, item: item)).toList(),
 
               const SizedBox(height: 20),
-              FutureBuilder<StorageConfig>(
-                future: StorageConfig.load(),
-                builder: (context, snapshot) {
-                  final config = snapshot.data;
-                  if (config == null || config.mode != StorageMode.api || config.apiUrl == null || config.apiUrl!.isEmpty) {
-                    return const SizedBox.shrink();
-                  }
-
-                  return Padding(
-                    padding: const EdgeInsets.only(bottom: 12),
-                    child: OutlinedButton.icon(
-                      style: OutlinedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 12),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                      ),
-                      icon: const Icon(Icons.wifi_tethering_rounded),
-                      label: Text('Test API connection (${normalizeApiUrl(config.apiUrl!)})'),
-                      onPressed: () async {
-                        try {
-                          await verifyApiReachable(config.apiUrl!);
-                          if (!context.mounted) return;
-                          showDialog(
-                            context: context,
-                            builder: (_) => const AlertDialog(
-                              title: Text('API reachable ✅'),
-                              content: Text('Your FastAPI endpoint accepted a socket connection.'),
-                            ),
-                          );
-                        } catch (e) {
-                          if (!context.mounted) return;
-                          showDialog(
-                            context: context,
-                            builder: (_) => AlertDialog(
-                              title: const Text('API unreachable'),
-                              content: Text('$e'),
-                              actions: [
-                                TextButton(onPressed: () => Navigator.pop(context), child: const Text('Close')),
-                              ],
-                            ),
-                          );
-                        }
-                      },
-                    ),
-                  );
-                },
-              ),
-
               FilledButton(
                 style: FilledButton.styleFrom(
                   backgroundColor: kPrimary,
@@ -1406,55 +1390,16 @@ class FrequencyPage extends StatelessWidget {
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
                 ),
                 onPressed: () async {
-                  final submission = data.buildSubmissionPayload();
-                  final config = await StorageConfig.load();
                   try {
-                    if (config.mode == StorageMode.api && config.apiUrl != null && config.apiUrl!.isNotEmpty) {
-                      final targetUrl = normalizeApiUrl(config.apiUrl!);
-                      await sendToApi(data, config.apiUrl!, payload: submission);
-                      if (!context.mounted) return;
-                      final jobId = submission['jobId'];
-                      final submittedAt = submission['submittedAt'];
-                      final details = [
-                        if (jobId is String && jobId.isNotEmpty) 'Job ID: $jobId',
-                        if (submittedAt is String && submittedAt.isNotEmpty) 'Submitted at: $submittedAt',
-                      ].join('\n');
-                      showDialog(
-                        context: context,
-                        builder: (_) => AlertDialog(
-                          title: const Text("Sent ✅"),
-                          content: Text([
-                            "Profile posted to API: $targetUrl",
-                            if (details.isNotEmpty) details,
-                          ].join('\n')),
-                          actions: [
-                            TextButton(onPressed: () => Navigator.pop(context), child: const Text("OK")),
-                          ],
-                        ),
-                      );
-                    } else {
-                      await data.save(payload: submission);
-                      if (!context.mounted) return;
-                      final jobId = submission['jobId'];
-                      final submittedAt = submission['submittedAt'];
-                      final details = [
-                        if (jobId is String && jobId.isNotEmpty) 'Job ID: $jobId',
-                        if (submittedAt is String && submittedAt.isNotEmpty) 'Saved at: $submittedAt',
-                      ].join('\n');
-                      showDialog(
-                        context: context,
-                        builder: (_) => AlertDialog(
-                          title: const Text("Saved ✅"),
-                          content: Text([
-                            "Saved locally as JSON in app documents storage:\nfoodadvisor_profile.json",
-                            if (details.isNotEmpty) details,
-                          ].join('\n')),
-                          actions: [
-                            TextButton(onPressed: () => Navigator.pop(context), child: const Text("OK")),
-                          ],
-                        ),
-                      );
-                    }
+                    await saveProfileToFirebase(data);
+                    if (!context.mounted) return;
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text("Profile saved to Firebase ✅")),
+                    );
+                    Navigator.pushReplacement(
+                      context,
+                      MaterialPageRoute(builder: (_) => DietPlanPage(data: data)),
+                    );
                   } catch (e) {
                     if (!context.mounted) return;
                     showDialog(
