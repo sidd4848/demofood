@@ -21,12 +21,25 @@ class UserProfileSummary {
   final double weightKg;
 }
 
+class DietPlanData {
+  const DietPlanData({
+    required this.jobId,
+    required this.calorieDeficit,
+    required this.plan,
+  });
+
+  final String jobId;
+  final int calorieDeficit;
+  final Map<String, String> plan;
+}
+
 Future<void> saveProfileToFirebase(AppData data) async {
   final user = FirebaseAuth.instance.currentUser;
   if (user == null) {
     throw StateError('No authenticated user.');
   }
   final payload = data.buildSubmissionPayload();
+  final jobId = payload['jobId'] as String;
   final ref = FirebaseFirestore.instance.collection('users').doc(user.uid);
   await ref.set({
     'profile': payload,
@@ -34,17 +47,75 @@ Future<void> saveProfileToFirebase(AppData data) async {
     'displayName': user.displayName,
     'updatedAt': FieldValue.serverTimestamp(),
   }, SetOptions(merge: true));
+
+  final dietRef = FirebaseFirestore.instance.collection('diet').doc(jobId);
+  await dietRef.set(
+    buildDietDocument(jobId),
+    SetOptions(merge: true),
+  );
 }
 
-Future<String?> fetchDietPlan() async {
+Map<String, dynamic> buildDietDocument(String jobId) {
+  return {
+    'jobId': jobId,
+    'calorie deficit': 300,
+    'plan': {
+      'Mon_breakfast': 'Overnight oats + berries',
+      'Mon_lunch': 'Grilled paneer salad',
+      'Mon_dinner': 'Lentil soup + veggies',
+      'Tue_breakfast': 'Avocado toast',
+      'Tue_lunch': 'Quinoa bowl',
+      'Tue_dinner': 'Stir-fry tofu + greens',
+      'Wed_breakfast': 'Moong chilla',
+      'Wed_lunch': 'Brown rice + dal',
+      'Wed_dinner': 'Baked fish + salad',
+      'Thu_breakfast': 'Smoothie bowl',
+      'Thu_lunch': 'Chickpea wrap',
+      'Thu_dinner': 'Veg curry + roti',
+      'Fri_breakfast': 'Idli + sambar',
+      'Fri_lunch': 'Mediterranean salad',
+      'Fri_dinner': 'Grilled chicken + veggies',
+      'Sat_breakfast': 'Upma + fruit',
+      'Sat_lunch': 'Paneer tikka bowl',
+      'Sat_dinner': 'Stuffed bell peppers',
+      'Sun_breakfast': 'Veggie omelet',
+      'Sun_lunch': 'Sushi bowl',
+      'Sun_dinner': 'Veg soup + salad',
+    },
+  };
+}
+
+String dietDocumentExampleJson(String jobId) {
+  return const JsonEncoder.withIndent('  ').convert(buildDietDocument(jobId));
+}
+
+Future<DietPlanData?> fetchDietPlan() async {
   final user = FirebaseAuth.instance.currentUser;
   if (user == null) return null;
   final snapshot = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
   if (!snapshot.exists) return null;
-  final value = snapshot.data()?['dietPlan'];
-  if (value == null) return null;
-  if (value is String) return value;
-  return const JsonEncoder.withIndent('  ').convert(value);
+  final data = snapshot.data();
+  if (data == null) return null;
+  String? jobId;
+  final payload = data['profile'];
+  if (payload is Map<String, dynamic>) {
+    jobId = payload['jobId'] as String?;
+  }
+  if (jobId == null || jobId.isEmpty) return null;
+  final dietSnapshot = await FirebaseFirestore.instance.collection('diet').doc(jobId).get();
+  if (!dietSnapshot.exists) return null;
+  final dietData = dietSnapshot.data();
+  if (dietData == null) return null;
+  final deficitRaw = dietData['calorie deficit'];
+  final deficit = deficitRaw is int ? deficitRaw : (deficitRaw as num?)?.toInt() ?? 0;
+  final planRaw = dietData['plan'];
+  final plan = <String, String>{};
+  if (planRaw is Map<String, dynamic>) {
+    planRaw.forEach((key, value) {
+      plan[key] = value?.toString() ?? '';
+    });
+  }
+  return DietPlanData(jobId: jobId, calorieDeficit: deficit, plan: plan);
 }
 
 Future<bool> hasExistingProfile() async {

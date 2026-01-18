@@ -3,6 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 
 import 'models/app_data.dart';
+import 'pages/diet_generation_options_page.dart';
 import 'pages/diet_plan_page.dart';
 import 'pages/user_details_page.dart';
 import 'services/profile_service.dart';
@@ -845,7 +846,7 @@ class FrequencyPage extends StatelessWidget {
                     Navigator.pushReplacement(
                       context,
                       MaterialPageRoute(
-                        builder: (_) => DietPlanPage(
+                        builder: (_) => DietGenerationOptionsPage(
                           data: data,
                           preferencesBuilder: (_) => PreferencesPage(data: data),
                         ),

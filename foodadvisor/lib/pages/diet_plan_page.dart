@@ -31,7 +31,7 @@ class _DietPlanPageState extends State<DietPlanPage> {
       fetchUserProfileSummary(),
     ]);
     return _DietPlanBundle(
-      plan: results[0] as String?,
+      plan: results[0] as DietPlanData?,
       profile: results[1] as UserProfileSummary?,
     );
   }
@@ -60,30 +60,56 @@ class _DietPlanPageState extends State<DietPlanPage> {
     return bmr * 0.85;
   }
 
-  List<_DayPlan> _dayPlans(String? note) {
-    const meals = [
-      ["Greek yogurt + fruit", "Millet bowl + greens", "Grilled paneer + veggies", "Herbal tea"],
-      ["Avocado toast", "Dal + brown rice", "Tofu stir-fry", "Citrus water"],
-      ["Moong chilla", "Veg quinoa salad", "Baked fish + veggies", "Dark chocolate square"],
-      ["Smoothie bowl", "Chickpea wrap", "Lean chicken + salad", "Green tea"],
-      ["Idli + sambar", "Veggie biryani", "Lentil soup + salad", "Roasted makhana"],
-      ["Overnight oats", "Paneer tikka bowl", "Veg curry + roti", "Warm lemon water"],
-      ["Upma + fruit", "Sushi bowl", "Stuffed bell peppers", "Coconut water"],
+  List<_DayPlan> _dayPlans(DietPlanData? dietPlan) {
+    final fallbackMeals = [
+      ["Greek yogurt + fruit", "Millet bowl + greens", "Grilled paneer + veggies"],
+      ["Avocado toast", "Dal + brown rice", "Tofu stir-fry"],
+      ["Moong chilla", "Veg quinoa salad", "Baked fish + veggies"],
+      ["Smoothie bowl", "Chickpea wrap", "Lean chicken + salad"],
+      ["Idli + sambar", "Veggie biryani", "Lentil soup + salad"],
+      ["Overnight oats", "Paneer tikka bowl", "Veg curry + roti"],
+      ["Upma + fruit", "Sushi bowl", "Stuffed bell peppers"],
     ];
 
     final now = DateTime.now();
     final plans = <_DayPlan>[];
     for (var i = 0; i < 7; i++) {
       final day = now.add(Duration(days: i));
+      final key = _weekdayKey(day.weekday);
+      final breakfast = dietPlan?.plan['${key}_breakfast'];
+      final lunch = dietPlan?.plan['${key}_lunch'];
+      final dinner = dietPlan?.plan['${key}_dinner'];
+      final meals = (breakfast != null && lunch != null && dinner != null)
+          ? [breakfast, lunch, dinner]
+          : fallbackMeals[i % fallbackMeals.length];
       plans.add(
         _DayPlan(
           date: day,
-          meals: meals[i % meals.length],
-          note: note?.trim().isEmpty ?? true ? null : note,
+          meals: meals,
         ),
       );
     }
     return plans;
+  }
+
+  String _weekdayKey(int weekday) {
+    switch (weekday) {
+      case DateTime.monday:
+        return 'Mon';
+      case DateTime.tuesday:
+        return 'Tue';
+      case DateTime.wednesday:
+        return 'Wed';
+      case DateTime.thursday:
+        return 'Thu';
+      case DateTime.friday:
+        return 'Fri';
+      case DateTime.saturday:
+        return 'Sat';
+      case DateTime.sunday:
+        return 'Sun';
+    }
+    return 'Mon';
   }
 
   @override
@@ -119,10 +145,16 @@ class _DietPlanPageState extends State<DietPlanPage> {
             }
 
             final profile = snapshot.data?.profile;
-            final planNote = snapshot.data?.plan;
+            final dietPlan = snapshot.data?.plan;
             final bmr = _bmrForProfile(profile);
-            final deficit = _calorieDeficit(bmr);
-            final plans = _dayPlans(planNote);
+            final deficit = dietPlan?.calorieDeficit ?? _calorieDeficit(bmr)?.round();
+            final plans = _dayPlans(dietPlan);
+
+            if (dietPlan == null) {
+              return _DietLoadingState(
+                exampleJson: dietDocumentExampleJson('job_1710000000000_ab12cd'),
+              );
+            }
 
             return ListView(
               padding: const EdgeInsets.all(20),
@@ -139,7 +171,7 @@ class _DietPlanPageState extends State<DietPlanPage> {
                 const SizedBox(height: 16),
                 _MetricsCard(
                   bmr: bmr,
-                  deficitTarget: deficit,
+                  deficitTarget: deficit?.toDouble(),
                 ),
                 const SizedBox(height: 18),
                 const SectionTitle(
@@ -208,10 +240,69 @@ class _DietPlanPageState extends State<DietPlanPage> {
 }
 
 class _DietPlanBundle {
-  final String? plan;
+  final DietPlanData? plan;
   final UserProfileSummary? profile;
 
   const _DietPlanBundle({required this.plan, required this.profile});
+}
+
+class _DietLoadingState extends StatelessWidget {
+  final String exampleJson;
+  const _DietLoadingState({required this.exampleJson});
+
+  @override
+  Widget build(BuildContext context) {
+    return ListView(
+      padding: const EdgeInsets.all(24),
+      children: [
+        const SizedBox(height: 16),
+        const Text(
+          "Diet is loading soon",
+          textAlign: TextAlign.center,
+          style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800),
+        ),
+        const SizedBox(height: 10),
+        Text(
+          "Our nutrition engine is crafting your 7-day plan right now.",
+          textAlign: TextAlign.center,
+          style: TextStyle(color: Colors.grey.shade700),
+        ),
+        const SizedBox(height: 20),
+        Center(
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(20),
+            child: Image.network(
+              "https://media.giphy.com/media/QssGEmpkyEOhBCb7e1/giphy.gif",
+              height: 160,
+              width: 160,
+              fit: BoxFit.cover,
+            ),
+          ),
+        ),
+        const SizedBox(height: 24),
+        Card(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  "Example diet document",
+                  style: TextStyle(fontWeight: FontWeight.w800),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  exampleJson,
+                  style: const TextStyle(fontFamily: 'monospace', fontSize: 12, height: 1.4),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
 }
 
 class _DietHeader extends StatelessWidget {
@@ -369,9 +460,8 @@ class _MetricTile extends StatelessWidget {
 class _DayPlan {
   final DateTime date;
   final List<String> meals;
-  final String? note;
 
-  const _DayPlan({required this.date, required this.meals, required this.note});
+  const _DayPlan({required this.date, required this.meals});
 }
 
 class _DayPlanCard extends StatelessWidget {
@@ -433,15 +523,6 @@ class _DayPlanCard extends StatelessWidget {
                 ),
               ),
             ),
-            if (plan.note != null) ...[
-              const Divider(height: 20),
-              Text(
-                plan.note!,
-                maxLines: 3,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(color: Colors.grey.shade700, height: 1.4),
-              ),
-            ],
           ],
         ),
       ),
