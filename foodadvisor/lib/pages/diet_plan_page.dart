@@ -5,6 +5,7 @@ import '../models/app_data.dart';
 import '../services/profile_service.dart';
 import '../theme.dart';
 import '../widgets/form_widgets.dart';
+import 'diet_generation_options_page.dart';
 import 'user_details_page.dart';
 
 class DietPlanPage extends StatefulWidget {
@@ -20,6 +21,8 @@ class _DietPlanPageState extends State<DietPlanPage> {
   late Future<_DietPlanBundle> _dietPlanFuture;
   final Map<String, String> _editablePlan = {};
   final TextEditingController _selfDeficitController = TextEditingController(text: '300');
+  bool _showSavedPlan = false;
+  bool _hasRoutedMissingUserId = false;
 
   @override
   void initState() {
@@ -51,6 +54,35 @@ class _DietPlanPageState extends State<DietPlanPage> {
   void _refreshPlan() {
     setState(() {
       _dietPlanFuture = _fetchBundle();
+    });
+  }
+
+  void _routeMissingUserId(UserProfileSummary? profile) {
+    if (_hasRoutedMissingUserId) return;
+    _hasRoutedMissingUserId = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      if (profile == null) {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (_) => UserDetailsPage(
+              data: widget.data,
+              nextPageBuilder: widget.preferencesBuilder,
+            ),
+          ),
+        );
+        return;
+      }
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (_) => DietGenerationOptionsPage(
+            data: widget.data,
+            preferencesBuilder: widget.preferencesBuilder,
+          ),
+        ),
+      );
     });
   }
 
@@ -232,6 +264,13 @@ class _DietPlanPageState extends State<DietPlanPage> {
             final bmr = _bmrForProfile(profile);
             final deficit = dietPlan?.calorieDeficit ?? _calorieDeficit(bmr)?.round();
 
+            if (dietPlan != null && dietPlan.userId == null) {
+              _routeMissingUserId(profile);
+              return const _DietLoadingState(
+                message: "Updating your plan details.",
+              );
+            }
+
             if (choice == null) {
               return const _DietLoadingState(
                 message: "Pick a diet generation style to continue.",
@@ -244,13 +283,25 @@ class _DietPlanPageState extends State<DietPlanPage> {
               );
             }
 
-            if (choice.generatedBy == 'self') {
+            if (choice.generatedBy == 'self' && !_showSavedPlan) {
               final source = dietPlan?.plan ?? _fallbackPlanMap();
               _ensureEditablePlan(source);
               return _SelfPlanEditor(
                 editablePlan: _editablePlan,
                 deficitController: _selfDeficitController,
                 onUpdate: () => setState(() {}),
+                onUpdateProfile: () {
+                  widget.data.reset();
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => UserDetailsPage(
+                        data: widget.data,
+                        nextPageBuilder: widget.preferencesBuilder,
+                      ),
+                    ),
+                  );
+                },
                 onSave: jobId == null
                     ? null
                     : () async {
@@ -260,7 +311,13 @@ class _DietPlanPageState extends State<DietPlanPage> {
                           calorieDeficit: deficitValue,
                           plan: _editablePlan,
                         );
+                        _refreshPlan();
                       },
+                onSaved: () {
+                  setState(() {
+                    _showSavedPlan = true;
+                  });
+                },
               );
             }
 
@@ -411,18 +468,61 @@ class _DietLoadingState extends StatelessWidget {
   }
 }
 
-class _SelfPlanEditor extends StatelessWidget {
+class _SelfPlanEditor extends StatefulWidget {
   final Map<String, String> editablePlan;
   final TextEditingController deficitController;
   final VoidCallback onUpdate;
+  final VoidCallback onUpdateProfile;
+  final VoidCallback onSaved;
   final Future<void> Function()? onSave;
 
   const _SelfPlanEditor({
     required this.editablePlan,
     required this.deficitController,
     required this.onUpdate,
+    required this.onUpdateProfile,
+    required this.onSaved,
     required this.onSave,
   });
+
+  @override
+  State<_SelfPlanEditor> createState() => _SelfPlanEditorState();
+}
+
+class _SelfPlanEditorState extends State<_SelfPlanEditor> {
+  bool _isSaving = false;
+
+  Future<void> _handleSave() async {
+    if (_isSaving) return;
+    if (widget.onSave == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Unable to save yet. Please try again in a moment.")),
+      );
+      return;
+    }
+    setState(() {
+      _isSaving = true;
+    });
+    try {
+      await widget.onSave?.call();
+      if (!mounted) return;
+      widget.onSaved();
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Plan saved successfully.")),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Unable to save plan. Please try again.")),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isSaving = false;
+        });
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -448,9 +548,18 @@ class _SelfPlanEditor extends StatelessWidget {
           "Fill in breakfast, lunch, and dinner for each day.",
           style: TextStyle(color: Colors.grey.shade700),
         ),
+        const SizedBox(height: 12),
+        Align(
+          alignment: Alignment.centerRight,
+          child: OutlinedButton.icon(
+            onPressed: widget.onUpdateProfile,
+            icon: const Icon(Icons.manage_accounts_outlined),
+            label: const Text("Update details"),
+          ),
+        ),
         const SizedBox(height: 16),
         TextField(
-          controller: deficitController,
+          controller: widget.deficitController,
           keyboardType: TextInputType.number,
           decoration: const InputDecoration(labelText: "Calorie deficit (kcal)"),
         ),
@@ -468,28 +577,28 @@ class _SelfPlanEditor extends StatelessWidget {
                   const SizedBox(height: 8),
                   _SelfMealField(
                     label: "Breakfast",
-                    initialValue: editablePlan['${key}_breakfast'] ?? '',
+                    initialValue: widget.editablePlan['${key}_breakfast'] ?? '',
                     onChanged: (value) {
-                      editablePlan['${key}_breakfast'] = value;
-                      onUpdate();
+                      widget.editablePlan['${key}_breakfast'] = value;
+                      widget.onUpdate();
                     },
                   ),
                   const SizedBox(height: 10),
                   _SelfMealField(
                     label: "Lunch",
-                    initialValue: editablePlan['${key}_lunch'] ?? '',
+                    initialValue: widget.editablePlan['${key}_lunch'] ?? '',
                     onChanged: (value) {
-                      editablePlan['${key}_lunch'] = value;
-                      onUpdate();
+                      widget.editablePlan['${key}_lunch'] = value;
+                      widget.onUpdate();
                     },
                   ),
                   const SizedBox(height: 10),
                   _SelfMealField(
                     label: "Dinner",
-                    initialValue: editablePlan['${key}_dinner'] ?? '',
+                    initialValue: widget.editablePlan['${key}_dinner'] ?? '',
                     onChanged: (value) {
-                      editablePlan['${key}_dinner'] = value;
-                      onUpdate();
+                      widget.editablePlan['${key}_dinner'] = value;
+                      widget.onUpdate();
                     },
                   ),
                 ],
@@ -499,8 +608,14 @@ class _SelfPlanEditor extends StatelessWidget {
         }),
         const SizedBox(height: 16),
         FilledButton(
-          onPressed: onSave,
-          child: const Text("Save plan"),
+          onPressed: _handleSave,
+          child: _isSaving
+              ? const SizedBox(
+                  height: 18,
+                  width: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Text("Save plan"),
         ),
       ],
     );

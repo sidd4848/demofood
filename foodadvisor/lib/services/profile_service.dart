@@ -22,11 +22,13 @@ class UserProfileSummary {
 class DietPlanData {
   const DietPlanData({
     required this.jobId,
+    required this.userId,
     required this.calorieDeficit,
     required this.plan,
   });
 
   final String jobId;
+  final String? userId;
   final int calorieDeficit;
   final Map<String, String> plan;
 }
@@ -84,21 +86,39 @@ Future<DietGenerationChoice?> fetchDietGenerationChoice() async {
 Future<DietPlanData?> fetchDietPlan() async {
   final user = FirebaseAuth.instance.currentUser;
   if (user == null) return null;
-  final snapshot = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
-  if (!snapshot.exists) return null;
-  final data = snapshot.data();
-  if (data == null) return null;
   String? jobId;
-  final payload = data['profile'];
-  if (payload is Map<String, dynamic>) {
-    jobId = payload['jobId'] as String?;
-  }
-  if (jobId == null || jobId.isEmpty) return null;
+  Map<String, dynamic>? dietData;
   try {
-    final dietSnapshot = await FirebaseFirestore.instance.collection('diet').doc(jobId).get();
-    if (!dietSnapshot.exists) return null;
-    final dietData = dietSnapshot.data();
-    if (dietData == null) return null;
+    final snapshot = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
+    if (snapshot.exists) {
+      final data = snapshot.data();
+      if (data != null) {
+        final payload = data['profile'];
+        if (payload is Map<String, dynamic>) {
+          jobId = payload['jobId'] as String?;
+        }
+      }
+    }
+    if (jobId != null && jobId.isNotEmpty) {
+      final dietSnapshot = await FirebaseFirestore.instance.collection('diet').doc(jobId).get();
+      if (dietSnapshot.exists) {
+        dietData = dietSnapshot.data();
+        jobId = dietData?['jobId'] as String? ?? jobId;
+      }
+    } else {
+      final dietSnapshot = await FirebaseFirestore.instance
+          .collection('diet')
+          .where('userId', isEqualTo: user.uid)
+          .orderBy('updatedAt', descending: true)
+          .limit(1)
+          .get();
+      if (dietSnapshot.docs.isEmpty) return null;
+      final doc = dietSnapshot.docs.first;
+      dietData = doc.data();
+      jobId = dietData['jobId'] as String? ?? doc.id;
+    }
+    if (dietData == null || jobId == null || jobId.isEmpty) return null;
+    final userId = dietData['userId'] as String?;
     final deficitRaw = dietData['calorie deficit'];
     final deficit = deficitRaw is int ? deficitRaw : (deficitRaw as num?)?.toInt() ?? 0;
     final planRaw = dietData['plan'];
@@ -108,7 +128,7 @@ Future<DietPlanData?> fetchDietPlan() async {
         plan[key] = value?.toString() ?? '';
       });
     }
-    return DietPlanData(jobId: jobId, calorieDeficit: deficit, plan: plan);
+    return DietPlanData(jobId: jobId, userId: userId, calorieDeficit: deficit, plan: plan);
   } on FirebaseException {
     return null;
   }
@@ -126,6 +146,7 @@ Future<void> saveSelfDietPlan({
   final dietRef = FirebaseFirestore.instance.collection('diet').doc(jobId);
   await dietRef.set({
     'jobId': jobId,
+    'userId': user.uid,
     'calorie deficit': calorieDeficit,
     'plan': plan,
     'updatedBy': user.uid,
