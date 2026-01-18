@@ -6,8 +6,15 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 
-void main() => runApp(const FoodAdvisorApp());
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await Firebase.initializeApp();
+  runApp(const FoodAdvisorApp());
+}
 
 /// -------------------------------
 /// App State (simple + no packages)
@@ -382,7 +389,7 @@ class _FoodAdvisorAppState extends State<FoodAdvisorApp> {
       builder: (context, _) => MaterialApp(
         debugShowCheckedModeBanner: false,
         theme: buildTheme(),
-        home: LandingPage(data: data),
+        home: const LandingPage(),
       ),
     );
   }
@@ -392,65 +399,30 @@ class _FoodAdvisorAppState extends State<FoodAdvisorApp> {
 /// Landing
 /// -------------------------------
 class LandingPage extends StatelessWidget {
-  final AppData data;
-  const LandingPage({super.key, required this.data});
+  const LandingPage({super.key});
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       body: SafeArea(
-        child: Padding(
+        child: SingleChildScrollView(
           padding: const EdgeInsets.all(20),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               _PremiumHeader(),
-              const SizedBox(height: 18),
-              _PremiumHeroCard(),
-              const Spacer(),
-              Row(
-                children: [
-                  Expanded(
-                    child: FilledButton(
-                      style: FilledButton.styleFrom(
-                        backgroundColor: kPrimary,
-                        padding: const EdgeInsets.symmetric(vertical: 16),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(18),
-                        ),
-                      ),
-                      onPressed: () {
-                        data.reset();
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => UserDetailsPage(data: data),
-                          ),
-                        );
-                      },
-                      child: const Text("New User"),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: FilledButton.tonal(
-                      style: FilledButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 16),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(18),
-                        ),
-                      ),
-                      onPressed: null, // disabled for now
-                      child: const Text("Existing User"),
-                    ),
-                  ),
-                ],
+              const SizedBox(height: 24),
+              const Text(
+                "“Let food be the gentle medicine you choose every day.”",
+                style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700, height: 1.4),
               ),
-              const SizedBox(height: 14),
+              const SizedBox(height: 8),
               Text(
-                "Existing user login will be enabled soon.",
-                style: TextStyle(color: Colors.grey.shade700),
+                "Sign in to keep your nutrition plan, favorites, and wellness goals synced across devices.",
+                style: TextStyle(color: Colors.grey.shade700, height: 1.4),
               ),
+              const SizedBox(height: 24),
+              const _SignInCard(),
             ],
           ),
         ),
@@ -485,41 +457,173 @@ class _PremiumHeader extends StatelessWidget {
   }
 }
 
-class _PremiumHeroCard extends StatelessWidget {
+class _SignInCard extends StatefulWidget {
+  const _SignInCard();
+
+  @override
+  State<_SignInCard> createState() => _SignInCardState();
+}
+
+class _SignInCardState extends State<_SignInCard> {
+  final _emailController = TextEditingController();
+  final _passwordController = TextEditingController();
+  bool _isLoading = false;
+
+  @override
+  void dispose() {
+    _emailController.dispose();
+    _passwordController.dispose();
+    super.dispose();
+  }
+
+  void _showMessage(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message)),
+    );
+  }
+
+  Future<void> _signInWithEmail() async {
+    final email = _emailController.text.trim();
+    final password = _passwordController.text.trim();
+    if (email.isEmpty || password.isEmpty) {
+      _showMessage("Please enter both email and password.");
+      return;
+    }
+    setState(() => _isLoading = true);
+    try {
+      await FirebaseAuth.instance.signInWithEmailAndPassword(
+        email: email,
+        password: password,
+      );
+      _showMessage("Signed in successfully.");
+    } on FirebaseAuthException catch (e) {
+      _showMessage(e.message ?? "Unable to sign in. Please try again.");
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
+  }
+
+  Future<void> _createAccount() async {
+    final email = _emailController.text.trim();
+    final password = _passwordController.text.trim();
+    if (email.isEmpty || password.isEmpty) {
+      _showMessage("Please enter both email and password.");
+      return;
+    }
+    setState(() => _isLoading = true);
+    try {
+      await FirebaseAuth.instance.createUserWithEmailAndPassword(
+        email: email,
+        password: password,
+      );
+      _showMessage("Account created. You're signed in!");
+    } on FirebaseAuthException catch (e) {
+      _showMessage(e.message ?? "Unable to create account.");
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
+  }
+
+  Future<void> _signInWithGoogle() async {
+    setState(() => _isLoading = true);
+    try {
+      final googleUser = await GoogleSignIn().signIn();
+      if (googleUser == null) {
+        _showMessage("Google sign-in was cancelled.");
+        return;
+      }
+      final googleAuth = await googleUser.authentication;
+      final credential = GoogleAuthProvider.credential(
+        accessToken: googleAuth.accessToken,
+        idToken: googleAuth.idToken,
+      );
+      await FirebaseAuth.instance.signInWithCredential(credential);
+      _showMessage("Signed in with Google.");
+    } on FirebaseAuthException catch (e) {
+      _showMessage(e.message ?? "Google sign-in failed.");
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Card(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
       child: Padding(
         padding: const EdgeInsets.all(18),
-        child: Row(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    "Warm, healing food guidance.",
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    "Personalised choices based on your diet, cuisines, allergies, and frequency.",
-                    style: TextStyle(color: Colors.grey.shade700, height: 1.3),
-                  ),
-                ],
+            const Text(
+              "Welcome back",
+              style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              "Sign in to continue your personalised food journey.",
+              style: TextStyle(color: Colors.grey.shade700, height: 1.4),
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: _emailController,
+              keyboardType: TextInputType.emailAddress,
+              textInputAction: TextInputAction.next,
+              decoration: const InputDecoration(
+                labelText: "Email address",
+                prefixIcon: Icon(Icons.email_outlined),
               ),
             ),
-            const SizedBox(width: 10),
-            Container(
-              height: 72,
-              width: 72,
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(18),
-                color: kPrimary.withOpacity(0.12),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _passwordController,
+              obscureText: true,
+              textInputAction: TextInputAction.done,
+              decoration: const InputDecoration(
+                labelText: "Password",
+                prefixIcon: Icon(Icons.lock_outline),
               ),
-              child: const Icon(Icons.favorite_rounded, color: kPrimary, size: 32),
-            )
+            ),
+            const SizedBox(height: 16),
+            FilledButton(
+              style: FilledButton.styleFrom(
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
+                ),
+              ),
+              onPressed: _isLoading ? null : _signInWithEmail,
+              child: _isLoading
+                  ? const SizedBox(
+                      height: 18,
+                      width: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Text("Sign in"),
+            ),
+            const SizedBox(height: 12),
+            OutlinedButton.icon(
+              style: OutlinedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
+                ),
+              ),
+              onPressed: _isLoading ? null : _signInWithGoogle,
+              icon: const Icon(Icons.account_circle_rounded),
+              label: const Text("Continue with Google"),
+            ),
+            const SizedBox(height: 8),
+            TextButton(
+              onPressed: _isLoading ? null : _createAccount,
+              child: const Text("New here? Create an account"),
+            ),
           ],
         ),
       ),
