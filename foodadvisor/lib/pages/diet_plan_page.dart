@@ -18,6 +18,8 @@ class DietPlanPage extends StatefulWidget {
 
 class _DietPlanPageState extends State<DietPlanPage> {
   late Future<_DietPlanBundle> _dietPlanFuture;
+  final Map<String, String> _editablePlan = {};
+  final TextEditingController _selfDeficitController = TextEditingController(text: '300');
 
   @override
   void initState() {
@@ -25,14 +27,24 @@ class _DietPlanPageState extends State<DietPlanPage> {
     _dietPlanFuture = _fetchBundle();
   }
 
+  @override
+  void dispose() {
+    _selfDeficitController.dispose();
+    super.dispose();
+  }
+
   Future<_DietPlanBundle> _fetchBundle() async {
     final results = await Future.wait([
       fetchDietPlan(),
       fetchUserProfileSummary(),
+      fetchDietGenerationChoice(),
+      fetchProfileJobId(),
     ]);
     return _DietPlanBundle(
       plan: results[0] as DietPlanData?,
       profile: results[1] as UserProfileSummary?,
+      choice: results[2] as DietGenerationChoice?,
+      jobId: results[3] as String?,
     );
   }
 
@@ -92,6 +104,75 @@ class _DietPlanPageState extends State<DietPlanPage> {
     return plans;
   }
 
+  Map<String, String> _fallbackPlanMap() {
+    const fallbackMeals = [
+      ["Greek yogurt + fruit", "Millet bowl + greens", "Grilled paneer + veggies"],
+      ["Avocado toast", "Dal + brown rice", "Tofu stir-fry"],
+      ["Moong chilla", "Veg quinoa salad", "Baked fish + veggies"],
+      ["Smoothie bowl", "Chickpea wrap", "Lean chicken + salad"],
+      ["Idli + sambar", "Veggie biryani", "Lentil soup + salad"],
+      ["Overnight oats", "Paneer tikka bowl", "Veg curry + roti"],
+      ["Upma + fruit", "Sushi bowl", "Stuffed bell peppers"],
+    ];
+    final map = <String, String>{};
+    final now = DateTime.now();
+    for (var i = 0; i < 7; i++) {
+      final key = _weekdayKey(now.add(Duration(days: i)).weekday);
+      map['${key}_breakfast'] = fallbackMeals[i][0];
+      map['${key}_lunch'] = fallbackMeals[i][1];
+      map['${key}_dinner'] = fallbackMeals[i][2];
+    }
+    return map;
+  }
+
+  void _ensureEditablePlan(Map<String, String> source) {
+    if (_editablePlan.isNotEmpty) return;
+    _editablePlan.addAll(source);
+  }
+
+  Future<void> _editDay(BuildContext context, String dayKey) async {
+    final breakfast = TextEditingController(text: _editablePlan['${dayKey}_breakfast'] ?? '');
+    final lunch = TextEditingController(text: _editablePlan['${dayKey}_lunch'] ?? '');
+    final dinner = TextEditingController(text: _editablePlan['${dayKey}_dinner'] ?? '');
+    final saved = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: Text("Edit $dayKey meals"),
+        content: SingleChildScrollView(
+          child: Column(
+            children: [
+              TextField(
+                controller: breakfast,
+                decoration: const InputDecoration(labelText: "Breakfast"),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: lunch,
+                decoration: const InputDecoration(labelText: "Lunch"),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: dinner,
+                decoration: const InputDecoration(labelText: "Dinner"),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text("Cancel")),
+          FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text("Save")),
+        ],
+      ),
+    );
+    if (saved == true) {
+      setState(() {
+        _editablePlan['${dayKey}_breakfast'] = breakfast.text.trim();
+        _editablePlan['${dayKey}_lunch'] = lunch.text.trim();
+        _editablePlan['${dayKey}_dinner'] = dinner.text.trim();
+      });
+    }
+  }
+
   String _weekdayKey(int weekday) {
     switch (weekday) {
       case DateTime.monday:
@@ -146,15 +227,51 @@ class _DietPlanPageState extends State<DietPlanPage> {
 
             final profile = snapshot.data?.profile;
             final dietPlan = snapshot.data?.plan;
+            final choice = snapshot.data?.choice;
+            final jobId = snapshot.data?.jobId;
             final bmr = _bmrForProfile(profile);
             final deficit = dietPlan?.calorieDeficit ?? _calorieDeficit(bmr)?.round();
-            final plans = _dayPlans(dietPlan);
 
-            if (dietPlan == null) {
-              return _DietLoadingState(
-                exampleJson: dietDocumentExampleJson('job_1710000000000_ab12cd'),
+            if (choice == null) {
+              return const _DietLoadingState(
+                message: "Pick a diet generation style to continue.",
               );
             }
+
+            if (choice.generatedBy == 'expert') {
+              return const _DietLoadingState(
+                message: "Expert nutritionist plans are coming soon.",
+              );
+            }
+
+            if (choice.generatedBy == 'self') {
+              final source = dietPlan?.plan ?? _fallbackPlanMap();
+              _ensureEditablePlan(source);
+              return _SelfPlanEditor(
+                editablePlan: _editablePlan,
+                deficitController: _selfDeficitController,
+                onUpdate: () => setState(() {}),
+                onSave: jobId == null
+                    ? null
+                    : () async {
+                        final deficitValue = int.tryParse(_selfDeficitController.text.trim()) ?? 300;
+                        await saveSelfDietPlan(
+                          jobId: jobId,
+                          calorieDeficit: deficitValue,
+                          plan: _editablePlan,
+                        );
+                      },
+              );
+            }
+
+            if (dietPlan == null) {
+              return const _DietLoadingState(
+                message: "Diet is loading soon.",
+              );
+            }
+
+            final plans = _dayPlans(dietPlan);
+            _ensureEditablePlan(dietPlan.plan);
 
             return ListView(
               padding: const EdgeInsets.all(20),
@@ -179,7 +296,10 @@ class _DietPlanPageState extends State<DietPlanPage> {
                   subtitle: "From today through the next 7 days.",
                 ),
                 const SizedBox(height: 12),
-                ...plans.map((plan) => _DayPlanCard(plan: plan)).toList(),
+                ...plans.map((plan) => _DayPlanCard(
+                      plan: plan,
+                      onEdit: () => _editDay(context, _weekdayKey(plan.date.weekday)),
+                    )),
                 const SizedBox(height: 18),
                 Card(
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
@@ -242,13 +362,20 @@ class _DietPlanPageState extends State<DietPlanPage> {
 class _DietPlanBundle {
   final DietPlanData? plan;
   final UserProfileSummary? profile;
+  final DietGenerationChoice? choice;
+  final String? jobId;
 
-  const _DietPlanBundle({required this.plan, required this.profile});
+  const _DietPlanBundle({
+    required this.plan,
+    required this.profile,
+    required this.choice,
+    required this.jobId,
+  });
 }
 
 class _DietLoadingState extends StatelessWidget {
-  final String exampleJson;
-  const _DietLoadingState({required this.exampleJson});
+  final String message;
+  const _DietLoadingState({required this.message});
 
   @override
   Widget build(BuildContext context) {
@@ -263,7 +390,7 @@ class _DietLoadingState extends StatelessWidget {
         ),
         const SizedBox(height: 10),
         Text(
-          "Our nutrition engine is crafting your 7-day plan right now.",
+          message,
           textAlign: TextAlign.center,
           style: TextStyle(color: Colors.grey.shade700),
         ),
@@ -279,28 +406,124 @@ class _DietLoadingState extends StatelessWidget {
             ),
           ),
         ),
-        const SizedBox(height: 24),
-        Card(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  "Example diet document",
-                  style: TextStyle(fontWeight: FontWeight.w800),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  exampleJson,
-                  style: const TextStyle(fontFamily: 'monospace', fontSize: 12, height: 1.4),
-                ),
-              ],
+      ],
+    );
+  }
+}
+
+class _SelfPlanEditor extends StatelessWidget {
+  final Map<String, String> editablePlan;
+  final TextEditingController deficitController;
+  final VoidCallback onUpdate;
+  final Future<void> Function()? onSave;
+
+  const _SelfPlanEditor({
+    required this.editablePlan,
+    required this.deficitController,
+    required this.onUpdate,
+    required this.onSave,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    const weekDays = {
+      'Mon': 'Monday',
+      'Tue': 'Tuesday',
+      'Wed': 'Wednesday',
+      'Thu': 'Thursday',
+      'Fri': 'Friday',
+      'Sat': 'Saturday',
+      'Sun': 'Sunday',
+    };
+
+    return ListView(
+      padding: const EdgeInsets.all(20),
+      children: [
+        const Text(
+          "Build your own 7-day plan",
+          style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800),
+        ),
+        const SizedBox(height: 6),
+        Text(
+          "Fill in breakfast, lunch, and dinner for each day.",
+          style: TextStyle(color: Colors.grey.shade700),
+        ),
+        const SizedBox(height: 16),
+        TextField(
+          controller: deficitController,
+          keyboardType: TextInputType.number,
+          decoration: const InputDecoration(labelText: "Calorie deficit (kcal)"),
+        ),
+        const SizedBox(height: 12),
+        ...weekDays.entries.map((entry) {
+          final key = entry.key;
+          return Card(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(entry.value, style: const TextStyle(fontWeight: FontWeight.w800)),
+                  const SizedBox(height: 8),
+                  _SelfMealField(
+                    label: "Breakfast",
+                    initialValue: editablePlan['${key}_breakfast'] ?? '',
+                    onChanged: (value) {
+                      editablePlan['${key}_breakfast'] = value;
+                      onUpdate();
+                    },
+                  ),
+                  const SizedBox(height: 10),
+                  _SelfMealField(
+                    label: "Lunch",
+                    initialValue: editablePlan['${key}_lunch'] ?? '',
+                    onChanged: (value) {
+                      editablePlan['${key}_lunch'] = value;
+                      onUpdate();
+                    },
+                  ),
+                  const SizedBox(height: 10),
+                  _SelfMealField(
+                    label: "Dinner",
+                    initialValue: editablePlan['${key}_dinner'] ?? '',
+                    onChanged: (value) {
+                      editablePlan['${key}_dinner'] = value;
+                      onUpdate();
+                    },
+                  ),
+                ],
+              ),
             ),
-          ),
+          );
+        }),
+        const SizedBox(height: 16),
+        FilledButton(
+          onPressed: onSave,
+          child: const Text("Save plan"),
         ),
       ],
+    );
+  }
+}
+
+class _SelfMealField extends StatelessWidget {
+  final String label;
+  final String initialValue;
+  final ValueChanged<String> onChanged;
+
+  const _SelfMealField({
+    required this.label,
+    required this.initialValue,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return TextFormField(
+      initialValue: initialValue,
+      decoration: InputDecoration(labelText: label),
+      onChanged: onChanged,
     );
   }
 }
@@ -466,7 +689,8 @@ class _DayPlan {
 
 class _DayPlanCard extends StatelessWidget {
   final _DayPlan plan;
-  const _DayPlanCard({required this.plan});
+  final VoidCallback onEdit;
+  const _DayPlanCard({required this.plan, required this.onEdit});
 
   static const weekDays = [
     "Monday",
@@ -507,6 +731,11 @@ class _DayPlanCard extends StatelessWidget {
                 Text(
                   dateLabel,
                   style: TextStyle(color: Colors.grey.shade600),
+                ),
+                IconButton(
+                  tooltip: "Edit meals",
+                  onPressed: onEdit,
+                  icon: const Icon(Icons.edit_outlined),
                 ),
               ],
             ),

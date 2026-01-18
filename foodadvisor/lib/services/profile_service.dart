@@ -1,5 +1,3 @@
-import 'dart:convert';
-
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
@@ -33,13 +31,22 @@ class DietPlanData {
   final Map<String, String> plan;
 }
 
+class DietGenerationChoice {
+  const DietGenerationChoice({
+    required this.userId,
+    required this.generatedBy,
+  });
+
+  final String userId;
+  final String generatedBy;
+}
+
 Future<void> saveProfileToFirebase(AppData data) async {
   final user = FirebaseAuth.instance.currentUser;
   if (user == null) {
     throw StateError('No authenticated user.');
   }
   final payload = data.buildSubmissionPayload();
-  final jobId = payload['jobId'] as String;
   final ref = FirebaseFirestore.instance.collection('users').doc(user.uid);
   await ref.set({
     'profile': payload,
@@ -47,46 +54,31 @@ Future<void> saveProfileToFirebase(AppData data) async {
     'displayName': user.displayName,
     'updatedAt': FieldValue.serverTimestamp(),
   }, SetOptions(merge: true));
-
-  final dietRef = FirebaseFirestore.instance.collection('diet').doc(jobId);
-  await dietRef.set(
-    buildDietDocument(jobId),
-    SetOptions(merge: true),
-  );
 }
 
-Map<String, dynamic> buildDietDocument(String jobId) {
-  return {
-    'jobId': jobId,
-    'calorie deficit': 300,
-    'plan': {
-      'Mon_breakfast': 'Overnight oats + berries',
-      'Mon_lunch': 'Grilled paneer salad',
-      'Mon_dinner': 'Lentil soup + veggies',
-      'Tue_breakfast': 'Avocado toast',
-      'Tue_lunch': 'Quinoa bowl',
-      'Tue_dinner': 'Stir-fry tofu + greens',
-      'Wed_breakfast': 'Moong chilla',
-      'Wed_lunch': 'Brown rice + dal',
-      'Wed_dinner': 'Baked fish + salad',
-      'Thu_breakfast': 'Smoothie bowl',
-      'Thu_lunch': 'Chickpea wrap',
-      'Thu_dinner': 'Veg curry + roti',
-      'Fri_breakfast': 'Idli + sambar',
-      'Fri_lunch': 'Mediterranean salad',
-      'Fri_dinner': 'Grilled chicken + veggies',
-      'Sat_breakfast': 'Upma + fruit',
-      'Sat_lunch': 'Paneer tikka bowl',
-      'Sat_dinner': 'Stuffed bell peppers',
-      'Sun_breakfast': 'Veggie omelet',
-      'Sun_lunch': 'Sushi bowl',
-      'Sun_dinner': 'Veg soup + salad',
-    },
-  };
+Future<void> saveDietGenerationChoice(String generatedBy) async {
+  final user = FirebaseAuth.instance.currentUser;
+  if (user == null) {
+    throw StateError('No authenticated user.');
+  }
+  final ref = FirebaseFirestore.instance.collection('dietGeneration').doc(user.uid);
+  await ref.set({
+    'userId': user.uid,
+    'generatedBy': generatedBy,
+    'updatedAt': FieldValue.serverTimestamp(),
+  }, SetOptions(merge: true));
 }
 
-String dietDocumentExampleJson(String jobId) {
-  return const JsonEncoder.withIndent('  ').convert(buildDietDocument(jobId));
+Future<DietGenerationChoice?> fetchDietGenerationChoice() async {
+  final user = FirebaseAuth.instance.currentUser;
+  if (user == null) return null;
+  final snapshot = await FirebaseFirestore.instance.collection('dietGeneration').doc(user.uid).get();
+  if (!snapshot.exists) return null;
+  final data = snapshot.data();
+  if (data == null) return null;
+  final generatedBy = data['generatedBy'] as String?;
+  if (generatedBy == null || generatedBy.isEmpty) return null;
+  return DietGenerationChoice(userId: user.uid, generatedBy: generatedBy);
 }
 
 Future<DietPlanData?> fetchDietPlan() async {
@@ -102,20 +94,43 @@ Future<DietPlanData?> fetchDietPlan() async {
     jobId = payload['jobId'] as String?;
   }
   if (jobId == null || jobId.isEmpty) return null;
-  final dietSnapshot = await FirebaseFirestore.instance.collection('diet').doc(jobId).get();
-  if (!dietSnapshot.exists) return null;
-  final dietData = dietSnapshot.data();
-  if (dietData == null) return null;
-  final deficitRaw = dietData['calorie deficit'];
-  final deficit = deficitRaw is int ? deficitRaw : (deficitRaw as num?)?.toInt() ?? 0;
-  final planRaw = dietData['plan'];
-  final plan = <String, String>{};
-  if (planRaw is Map<String, dynamic>) {
-    planRaw.forEach((key, value) {
-      plan[key] = value?.toString() ?? '';
-    });
+  try {
+    final dietSnapshot = await FirebaseFirestore.instance.collection('diet').doc(jobId).get();
+    if (!dietSnapshot.exists) return null;
+    final dietData = dietSnapshot.data();
+    if (dietData == null) return null;
+    final deficitRaw = dietData['calorie deficit'];
+    final deficit = deficitRaw is int ? deficitRaw : (deficitRaw as num?)?.toInt() ?? 0;
+    final planRaw = dietData['plan'];
+    final plan = <String, String>{};
+    if (planRaw is Map<String, dynamic>) {
+      planRaw.forEach((key, value) {
+        plan[key] = value?.toString() ?? '';
+      });
+    }
+    return DietPlanData(jobId: jobId, calorieDeficit: deficit, plan: plan);
+  } on FirebaseException {
+    return null;
   }
-  return DietPlanData(jobId: jobId, calorieDeficit: deficit, plan: plan);
+}
+
+Future<void> saveSelfDietPlan({
+  required String jobId,
+  required int calorieDeficit,
+  required Map<String, String> plan,
+}) async {
+  final user = FirebaseAuth.instance.currentUser;
+  if (user == null) {
+    throw StateError('No authenticated user.');
+  }
+  final dietRef = FirebaseFirestore.instance.collection('diet').doc(jobId);
+  await dietRef.set({
+    'jobId': jobId,
+    'calorie deficit': calorieDeficit,
+    'plan': plan,
+    'updatedBy': user.uid,
+    'updatedAt': FieldValue.serverTimestamp(),
+  }, SetOptions(merge: true));
 }
 
 Future<bool> hasExistingProfile() async {
@@ -155,4 +170,18 @@ Future<UserProfileSummary?> fetchUserProfileSummary() async {
     heightCm: (profile['heightCm'] ?? 170).toDouble(),
     weightKg: (profile['weightKg'] ?? 70).toDouble(),
   );
+}
+
+Future<String?> fetchProfileJobId() async {
+  final user = FirebaseAuth.instance.currentUser;
+  if (user == null) return null;
+  final snapshot = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
+  if (!snapshot.exists) return null;
+  final data = snapshot.data();
+  if (data == null) return null;
+  final payload = data['profile'];
+  if (payload is Map<String, dynamic>) {
+    return payload['jobId'] as String?;
+  }
+  return null;
 }

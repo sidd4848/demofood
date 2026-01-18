@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../models/app_data.dart';
+import '../services/profile_service.dart';
 import '../theme.dart';
 import 'diet_plan_page.dart';
 
@@ -14,7 +15,8 @@ class DietGenerationOptionsPage extends StatelessWidget {
     required this.preferencesBuilder,
   });
 
-  void _openDietPlan(BuildContext context) {
+  Future<void> _saveChoiceAndOpen(BuildContext context, String generatedBy) async {
+    await saveDietGenerationChoice(generatedBy);
     Navigator.pushReplacement(
       context,
       MaterialPageRoute(
@@ -51,7 +53,7 @@ class DietGenerationOptionsPage extends StatelessWidget {
               description: "Fast, smart suggestions tailored to your profile.",
               icon: Icons.auto_awesome_rounded,
               accent: kPrimary,
-              onTap: () => _openDietPlan(context),
+              onTap: () => _saveChoiceAndOpen(context, 'ai'),
             ),
             const SizedBox(height: 16),
             _OptionCard(
@@ -59,7 +61,8 @@ class DietGenerationOptionsPage extends StatelessWidget {
               description: "Hand-crafted guidance from a nutrition professional.",
               icon: Icons.health_and_safety_rounded,
               accent: kSecondary,
-              onTap: () => _openDietPlan(context),
+              onTap: null,
+              disabledLabel: "Coming soon",
             ),
             const SizedBox(height: 16),
             _OptionCard(
@@ -67,7 +70,7 @@ class DietGenerationOptionsPage extends StatelessWidget {
               description: "Use your own expertise and preferences to guide the plan.",
               icon: Icons.self_improvement_rounded,
               accent: Colors.deepPurple,
-              onTap: () => _openDietPlan(context),
+              onTap: () => _saveChoiceAndOpen(context, 'self'),
             ),
           ],
         ),
@@ -81,7 +84,8 @@ class _OptionCard extends StatelessWidget {
   final String description;
   final IconData icon;
   final Color accent;
-  final VoidCallback onTap;
+  final VoidCallback? onTap;
+  final String? disabledLabel;
 
   const _OptionCard({
     required this.title,
@@ -89,6 +93,7 @@ class _OptionCard extends StatelessWidget {
     required this.icon,
     required this.accent,
     required this.onTap,
+    this.disabledLabel,
   });
 
   @override
@@ -128,14 +133,19 @@ class _OptionCard extends StatelessWidget {
             const SizedBox(height: 12),
             Align(
               alignment: Alignment.centerRight,
-              child: FilledButton(
-                style: FilledButton.styleFrom(
-                  backgroundColor: accent,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                ),
-                onPressed: onTap,
-                child: const Text("Continue"),
-              ),
+              child: onTap == null
+                  ? OutlinedButton(
+                      onPressed: null,
+                      child: Text(disabledLabel ?? "Unavailable"),
+                    )
+                  : FilledButton(
+                      style: FilledButton.styleFrom(
+                        backgroundColor: accent,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                      ),
+                      onPressed: onTap,
+                      child: const Text("Continue"),
+                    ),
             ),
           ],
         ),
