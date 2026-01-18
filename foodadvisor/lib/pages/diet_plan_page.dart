@@ -5,6 +5,7 @@ import '../models/app_data.dart';
 import '../services/profile_service.dart';
 import '../theme.dart';
 import '../widgets/form_widgets.dart';
+import 'diet_generation_options_page.dart';
 import 'user_details_page.dart';
 
 class DietPlanPage extends StatefulWidget {
@@ -20,6 +21,8 @@ class _DietPlanPageState extends State<DietPlanPage> {
   late Future<_DietPlanBundle> _dietPlanFuture;
   final Map<String, String> _editablePlan = {};
   final TextEditingController _selfDeficitController = TextEditingController(text: '300');
+  bool _showSavedPlan = false;
+  bool _hasRoutedMissingUserId = false;
 
   @override
   void initState() {
@@ -51,6 +54,35 @@ class _DietPlanPageState extends State<DietPlanPage> {
   void _refreshPlan() {
     setState(() {
       _dietPlanFuture = _fetchBundle();
+    });
+  }
+
+  void _routeMissingUserId(UserProfileSummary? profile) {
+    if (_hasRoutedMissingUserId) return;
+    _hasRoutedMissingUserId = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      if (profile == null) {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (_) => UserDetailsPage(
+              data: widget.data,
+              nextPageBuilder: widget.preferencesBuilder,
+            ),
+          ),
+        );
+        return;
+      }
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (_) => DietGenerationOptionsPage(
+            data: widget.data,
+            preferencesBuilder: widget.preferencesBuilder,
+          ),
+        ),
+      );
     });
   }
 
@@ -232,6 +264,13 @@ class _DietPlanPageState extends State<DietPlanPage> {
             final bmr = _bmrForProfile(profile);
             final deficit = dietPlan?.calorieDeficit ?? _calorieDeficit(bmr)?.round();
 
+            if (dietPlan != null && dietPlan.userId == null) {
+              _routeMissingUserId(profile);
+              return const _DietLoadingState(
+                message: "Updating your plan details.",
+              );
+            }
+
             if (choice == null) {
               return const _DietLoadingState(
                 message: "Pick a diet generation style to continue.",
@@ -244,7 +283,7 @@ class _DietPlanPageState extends State<DietPlanPage> {
               );
             }
 
-            if (choice.generatedBy == 'self') {
+            if (choice.generatedBy == 'self' && !_showSavedPlan) {
               final source = dietPlan?.plan ?? _fallbackPlanMap();
               _ensureEditablePlan(source);
               return _SelfPlanEditor(
@@ -274,6 +313,11 @@ class _DietPlanPageState extends State<DietPlanPage> {
                         );
                         _refreshPlan();
                       },
+                onSaved: () {
+                  setState(() {
+                    _showSavedPlan = true;
+                  });
+                },
               );
             }
 
@@ -429,6 +473,7 @@ class _SelfPlanEditor extends StatefulWidget {
   final TextEditingController deficitController;
   final VoidCallback onUpdate;
   final VoidCallback onUpdateProfile;
+  final VoidCallback onSaved;
   final Future<void> Function()? onSave;
 
   const _SelfPlanEditor({
@@ -436,6 +481,7 @@ class _SelfPlanEditor extends StatefulWidget {
     required this.deficitController,
     required this.onUpdate,
     required this.onUpdateProfile,
+    required this.onSaved,
     required this.onSave,
   });
 
@@ -460,6 +506,7 @@ class _SelfPlanEditorState extends State<_SelfPlanEditor> {
     try {
       await widget.onSave?.call();
       if (!mounted) return;
+      widget.onSaved();
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text("Plan saved successfully.")),
       );
