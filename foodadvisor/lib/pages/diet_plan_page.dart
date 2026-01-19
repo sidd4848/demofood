@@ -115,6 +115,10 @@ class _DietPlanPageState extends State<DietPlanPage> {
   }
 
   DateTime _startDateForPlan(DietPlanData? dietPlan) {
+    final startDate = dietPlan?.startDate;
+    if (startDate != null) {
+      return DateTime(startDate.year, startDate.month, startDate.day);
+    }
     final generatedAt = dietPlan?.generatedAt ?? DateTime.now();
     final normalized = DateTime(generatedAt.year, generatedAt.month, generatedAt.day);
     return normalized.add(const Duration(days: 1));
@@ -396,8 +400,10 @@ class _DietPlanPageState extends State<DietPlanPage> {
                 final source = dietPlan?.plan ?? _fallbackPlanMap();
                 _ensureEditablePlan(source);
                 return _SelfPlanEditor(
+                  data: widget.data,
                   editablePlan: _editablePlan,
                   deficitController: _selfDeficitController,
+                  preferencesBuilder: widget.preferencesBuilder,
                   onUpdate: () => setState(() {}),
                   onUpdateProfile: () {
                     widget.data.reset();
@@ -413,12 +419,13 @@ class _DietPlanPageState extends State<DietPlanPage> {
                   },
                   onSave: jobId == null
                       ? null
-                      : () async {
+                      : (startDate) async {
                           final deficitValue = int.tryParse(_selfDeficitController.text.trim()) ?? 300;
                           await saveSelfDietPlan(
                             jobId: jobId,
                             calorieDeficit: deficitValue,
                             plan: _editablePlan,
+                            startDate: startDate,
                           );
                           _refreshPlan();
                         },
@@ -433,9 +440,9 @@ class _DietPlanPageState extends State<DietPlanPage> {
 
               final plans = _dayPlans(dietPlan);
               _ensureEditablePlan(dietPlan.plan);
-
-              return ListView(
-                padding: const EdgeInsets.all(20),
+              const bottomBarHeight = 140.0;
+              final planList = ListView(
+                padding: const EdgeInsets.fromLTRB(20, 20, 20, bottomBarHeight),
                 children: [
                   _DietHeader(
                     title: "FoodAdvisor",
@@ -527,34 +534,35 @@ class _DietPlanPageState extends State<DietPlanPage> {
                     );
                   }),
                   const SizedBox(height: 18),
-                  Card(
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
-                    child: Padding(
-                      padding: const EdgeInsets.all(16),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text(
-                            "Schedule reminder",
-                            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
+                  _PlanContinuationCard(
+                    onCopy: () {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text("Plan copied for the next 7 days.")),
+                      );
+                    },
+                    onGenerateNew: () {
+                      Navigator.pushReplacement(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => DietGenerationOptionsPage(
+                            data: widget.data,
+                            preferencesBuilder: widget.preferencesBuilder,
                           ),
-                          const SizedBox(height: 6),
-                          Text(
-                            "WhatsApp reminders are coming soon.",
-                            style: TextStyle(color: Colors.grey.shade700),
-                          ),
-                          const SizedBox(height: 12),
-                          SizedBox(
-                            width: double.infinity,
-                            child: OutlinedButton.icon(
-                              onPressed: null,
-                              icon: const Icon(Icons.chat_bubble_outline_rounded),
-                              label: const Text("Enable WhatsApp reminders"),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
+                        ),
+                      );
+                    },
+                  ),
+                ],
+              );
+
+              return Stack(
+                children: [
+                  planList,
+                  Positioned(
+                    left: 20,
+                    right: 20,
+                    bottom: 12,
+                    child: _WhatsAppReminderBar(),
                   ),
                 ],
               );
@@ -621,15 +629,19 @@ class _DietLoadingState extends StatelessWidget {
 }
 
 class _SelfPlanEditor extends StatefulWidget {
+  final AppData data;
   final Map<String, String> editablePlan;
   final TextEditingController deficitController;
+  final WidgetBuilder preferencesBuilder;
   final VoidCallback onUpdate;
   final VoidCallback onUpdateProfile;
-  final Future<void> Function()? onSave;
+  final Future<void> Function(DateTime startDate)? onSave;
 
   const _SelfPlanEditor({
+    required this.data,
     required this.editablePlan,
     required this.deficitController,
+    required this.preferencesBuilder,
     required this.onUpdate,
     required this.onUpdateProfile,
     required this.onSave,
@@ -642,6 +654,42 @@ class _SelfPlanEditor extends StatefulWidget {
 class _SelfPlanEditorState extends State<_SelfPlanEditor> {
   bool _isSaving = false;
 
+  Future<DateTime?> _pickStartDate() {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    return showDialog<DateTime>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: const Text("When should the diet start?"),
+          content: SizedBox(
+            width: double.maxFinite,
+            height: 320,
+            child: ListView.builder(
+              itemCount: 15,
+              itemBuilder: (context, index) {
+                final date = today.add(Duration(days: index - 7));
+                final isPast = date.isBefore(today);
+                return ListTile(
+                  title: Text(MaterialLocalizations.of(context).formatMediumDate(date)),
+                  subtitle: Text(isPast ? "Unavailable" : "Available"),
+                  enabled: !isPast,
+                  onTap: isPast ? null : () => Navigator.pop(dialogContext, date),
+                );
+              },
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text("Cancel"),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   Future<void> _handleSave() async {
     if (_isSaving) return;
     if (widget.onSave == null) {
@@ -650,14 +698,25 @@ class _SelfPlanEditorState extends State<_SelfPlanEditor> {
       );
       return;
     }
+    final startDate = await _pickStartDate();
+    if (startDate == null) return;
     setState(() {
       _isSaving = true;
     });
     try {
-      await widget.onSave?.call();
+      await widget.onSave?.call(startDate);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text("Plan saved successfully.")),
+      );
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (_) => _SelfPlanNextStepPage(
+            data: widget.data,
+            preferencesBuilder: widget.preferencesBuilder,
+          ),
+        ),
       );
     } catch (_) {
       if (!mounted) return;
@@ -792,6 +851,135 @@ class _SelfMealField extends StatelessWidget {
   }
 }
 
+class _SelfPlanNextStepPage extends StatelessWidget {
+  final AppData data;
+  final WidgetBuilder preferencesBuilder;
+
+  const _SelfPlanNextStepPage({
+    required this.data,
+    required this.preferencesBuilder,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text("Next step")),
+      body: SafeArea(
+        child: ListView(
+          padding: const EdgeInsets.all(20),
+          children: [
+            const Text(
+              "Choose how to finalize your plan",
+              style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800),
+            ),
+            const SizedBox(height: 12),
+            _NextStepCard(
+              title: "Generate by AI",
+              description: "Let FoodAdvisor refine your plan with AI insights.",
+              icon: Icons.auto_awesome_rounded,
+              accent: kPrimary,
+              onTap: () async {
+                await saveDietGenerationChoice('ai');
+                if (!context.mounted) return;
+                Navigator.pushReplacement(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => DietPlanPage(
+                      data: data,
+                      preferencesBuilder: preferencesBuilder,
+                    ),
+                  ),
+                );
+              },
+            ),
+            const SizedBox(height: 16),
+            _NextStepCard(
+              title: "Generate by nutritionist",
+              description: "Upgrade to get expert nutritionist support.",
+              icon: Icons.health_and_safety_rounded,
+              accent: kSecondary,
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const UpgradePlanPage()),
+                );
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _NextStepCard extends StatelessWidget {
+  final String title;
+  final String description;
+  final IconData icon;
+  final Color accent;
+  final VoidCallback onTap;
+
+  const _NextStepCard({
+    required this.title,
+    required this.description,
+    required this.icon,
+    required this.accent,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
+      child: Padding(
+        padding: const EdgeInsets.all(18),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  height: 44,
+                  width: 44,
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(14),
+                    color: accent.withOpacity(0.15),
+                  ),
+                  child: Icon(icon, color: accent),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    title,
+                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            Text(
+              description,
+              style: TextStyle(color: Colors.grey.shade700, height: 1.4),
+            ),
+            const SizedBox(height: 12),
+            Align(
+              alignment: Alignment.centerRight,
+              child: FilledButton(
+                style: FilledButton.styleFrom(
+                  backgroundColor: accent,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                ),
+                onPressed: onTap,
+                child: const Text("Continue"),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _DietHeader extends StatelessWidget {
   final String title;
   final String subtitle;
@@ -837,6 +1025,93 @@ class _DietHeader extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _WhatsAppReminderBar extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              "Schedule reminder",
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              "WhatsApp reminders are coming soon.",
+              style: TextStyle(color: Colors.grey.shade700),
+            ),
+            const SizedBox(height: 12),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: null,
+                icon: const Icon(Icons.chat_bubble_outline_rounded),
+                label: const Text("Enable WhatsApp reminders"),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _PlanContinuationCard extends StatelessWidget {
+  final VoidCallback onCopy;
+  final VoidCallback onGenerateNew;
+
+  const _PlanContinuationCard({
+    required this.onCopy,
+    required this.onGenerateNew,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              "Continue your plan",
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              "After 7 days, you can reuse this plan or generate a fresh one.",
+              style: TextStyle(color: Colors.grey.shade700),
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: onCopy,
+                    child: const Text("Copy for next 7 days"),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: FilledButton(
+                    onPressed: onGenerateNew,
+                    child: const Text("Generate new"),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }

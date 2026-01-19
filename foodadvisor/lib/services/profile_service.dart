@@ -23,6 +23,7 @@ class DietPlanData {
   const DietPlanData({
     required this.jobId,
     required this.userId,
+    required this.startDate,
     required this.generatedAt,
     required this.calorieDeficit,
     required this.plan,
@@ -30,6 +31,7 @@ class DietPlanData {
 
   final String jobId;
   final String? userId;
+  final DateTime? startDate;
   final DateTime? generatedAt;
   final int calorieDeficit;
   final Map<String, String> plan;
@@ -132,6 +134,8 @@ Future<DietPlanData?> fetchDietPlan() async {
     }
     if (dietData == null || jobId == null || jobId.isEmpty) return null;
     final userId = dietData['userId'] as String?;
+    final startDateRaw = dietData['startDate'];
+    final startDate = _parseFirestoreTimestamp(startDateRaw);
     final updatedAtRaw = dietData['updatedAt'];
     final createdAtRaw = dietData['createdAt'];
     final generatedAt = _parseFirestoreTimestamp(updatedAtRaw) ?? _parseFirestoreTimestamp(createdAtRaw);
@@ -147,6 +151,7 @@ Future<DietPlanData?> fetchDietPlan() async {
     return DietPlanData(
       jobId: jobId,
       userId: userId,
+      startDate: startDate,
       generatedAt: generatedAt,
       calorieDeficit: deficit,
       plan: plan,
@@ -170,20 +175,25 @@ Future<void> saveSelfDietPlan({
   required String jobId,
   required int calorieDeficit,
   required Map<String, String> plan,
+  DateTime? startDate,
 }) async {
   final user = FirebaseAuth.instance.currentUser;
   if (user == null) {
     throw StateError('No authenticated user.');
   }
   final dietRef = FirebaseFirestore.instance.collection('diet').doc(jobId);
-  await dietRef.set({
+  final payload = <String, dynamic>{
     'jobId': jobId,
     'userId': user.uid,
     'calorie deficit': calorieDeficit,
     'plan': plan,
     'updatedBy': user.uid,
     'updatedAt': FieldValue.serverTimestamp(),
-  }, SetOptions(merge: true));
+  };
+  if (startDate != null) {
+    payload['startDate'] = Timestamp.fromDate(startDate);
+  }
+  await dietRef.set(payload, SetOptions(merge: true));
 }
 
 Future<bool> hasExistingProfile() async {
