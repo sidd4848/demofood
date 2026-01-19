@@ -645,6 +645,7 @@ class _SelfPlanEditor extends StatefulWidget {
   final AppData data;
   final Map<String, String> editablePlan;
   final TextEditingController deficitController;
+  final WidgetBuilder preferencesBuilder;
   final VoidCallback onUpdate;
   final VoidCallback onUpdateProfile;
   final Future<void> Function(DateTime startDate)? onSave;
@@ -653,6 +654,7 @@ class _SelfPlanEditor extends StatefulWidget {
     required this.data,
     required this.editablePlan,
     required this.deficitController,
+    required this.preferencesBuilder,
     required this.onUpdate,
     required this.onUpdateProfile,
     required this.onSave,
@@ -849,6 +851,135 @@ class _SelfMealField extends StatelessWidget {
       initialValue: initialValue,
       decoration: InputDecoration(labelText: label),
       onChanged: onChanged,
+    );
+  }
+}
+
+class _SelfPlanNextStepPage extends StatelessWidget {
+  final AppData data;
+  final WidgetBuilder preferencesBuilder;
+
+  const _SelfPlanNextStepPage({
+    required this.data,
+    required this.preferencesBuilder,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text("Next step")),
+      body: SafeArea(
+        child: ListView(
+          padding: const EdgeInsets.all(20),
+          children: [
+            const Text(
+              "Choose how to finalize your plan",
+              style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800),
+            ),
+            const SizedBox(height: 12),
+            _NextStepCard(
+              title: "Generate by AI",
+              description: "Let FoodAdvisor refine your plan with AI insights.",
+              icon: Icons.auto_awesome_rounded,
+              accent: kPrimary,
+              onTap: () async {
+                await saveDietGenerationChoice('ai');
+                if (!context.mounted) return;
+                Navigator.pushReplacement(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => DietPlanPage(
+                      data: data,
+                      preferencesBuilder: preferencesBuilder,
+                    ),
+                  ),
+                );
+              },
+            ),
+            const SizedBox(height: 16),
+            _NextStepCard(
+              title: "Generate by nutritionist",
+              description: "Upgrade to get expert nutritionist support.",
+              icon: Icons.health_and_safety_rounded,
+              accent: kSecondary,
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const UpgradePlanPage()),
+                );
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _NextStepCard extends StatelessWidget {
+  final String title;
+  final String description;
+  final IconData icon;
+  final Color accent;
+  final VoidCallback onTap;
+
+  const _NextStepCard({
+    required this.title,
+    required this.description,
+    required this.icon,
+    required this.accent,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
+      child: Padding(
+        padding: const EdgeInsets.all(18),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  height: 44,
+                  width: 44,
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(14),
+                    color: accent.withOpacity(0.15),
+                  ),
+                  child: Icon(icon, color: accent),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    title,
+                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            Text(
+              description,
+              style: TextStyle(color: Colors.grey.shade700, height: 1.4),
+            ),
+            const SizedBox(height: 12),
+            Align(
+              alignment: Alignment.centerRight,
+              child: FilledButton(
+                style: FilledButton.styleFrom(
+                  backgroundColor: accent,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                ),
+                onPressed: onTap,
+                child: const Text("Continue"),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
