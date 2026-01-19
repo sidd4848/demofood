@@ -23,12 +23,14 @@ class DietPlanData {
   const DietPlanData({
     required this.jobId,
     required this.userId,
+    required this.generatedAt,
     required this.calorieDeficit,
     required this.plan,
   });
 
   final String jobId;
   final String? userId;
+  final DateTime? generatedAt;
   final int calorieDeficit;
   final Map<String, String> plan;
 }
@@ -119,6 +121,9 @@ Future<DietPlanData?> fetchDietPlan() async {
     }
     if (dietData == null || jobId == null || jobId.isEmpty) return null;
     final userId = dietData['userId'] as String?;
+    final updatedAtRaw = dietData['updatedAt'];
+    final createdAtRaw = dietData['createdAt'];
+    final generatedAt = _parseFirestoreTimestamp(updatedAtRaw) ?? _parseFirestoreTimestamp(createdAtRaw);
     final deficitRaw = dietData['calorie deficit'];
     final deficit = deficitRaw is int ? deficitRaw : (deficitRaw as num?)?.toInt() ?? 0;
     final planRaw = dietData['plan'];
@@ -128,10 +133,26 @@ Future<DietPlanData?> fetchDietPlan() async {
         plan[key] = value?.toString() ?? '';
       });
     }
-    return DietPlanData(jobId: jobId, userId: userId, calorieDeficit: deficit, plan: plan);
+    return DietPlanData(
+      jobId: jobId,
+      userId: userId,
+      generatedAt: generatedAt,
+      calorieDeficit: deficit,
+      plan: plan,
+    );
   } on FirebaseException {
     return null;
   }
+}
+
+DateTime? _parseFirestoreTimestamp(dynamic value) {
+  if (value is Timestamp) {
+    return value.toDate();
+  }
+  if (value is DateTime) {
+    return value;
+  }
+  return null;
 }
 
 Future<void> saveSelfDietPlan({
