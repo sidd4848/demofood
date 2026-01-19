@@ -400,6 +400,7 @@ class _DietPlanPageState extends State<DietPlanPage> {
                 final source = dietPlan?.plan ?? _fallbackPlanMap();
                 _ensureEditablePlan(source);
                 return _SelfPlanEditor(
+                  data: widget.data,
                   editablePlan: _editablePlan,
                   deficitController: _selfDeficitController,
                   onUpdate: () => setState(() {}),
@@ -641,6 +642,7 @@ class _DietLoadingState extends StatelessWidget {
 }
 
 class _SelfPlanEditor extends StatefulWidget {
+  final AppData data;
   final Map<String, String> editablePlan;
   final TextEditingController deficitController;
   final WidgetBuilder preferencesBuilder;
