@@ -52,12 +52,23 @@ Future<void> saveProfileToFirebase(AppData data) async {
   }
   final payload = data.buildSubmissionPayload();
   final ref = FirebaseFirestore.instance.collection('users').doc(user.uid);
-  await ref.set({
+  final snapshot = await ref.get();
+  final isNewUser = !snapshot.exists;
+  final profileData = <String, dynamic>{
     'profile': payload,
     'email': user.email,
     'displayName': user.displayName,
     'updatedAt': FieldValue.serverTimestamp(),
-  }, SetOptions(merge: true));
+  };
+  if (isNewUser) {
+    profileData.addAll({
+      'plan': 'free',
+      'subscriptionStatus': 'trial',
+      'subscriptionId': null,
+      'currentPeriodEnd': null,
+    });
+  }
+  await ref.set(profileData, SetOptions(merge: true));
 }
 
 Future<void> saveDietGenerationChoice(String generatedBy) async {

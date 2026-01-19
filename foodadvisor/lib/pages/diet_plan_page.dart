@@ -8,6 +8,7 @@ import '../services/profile_service.dart';
 import '../theme.dart';
 import '../widgets/form_widgets.dart';
 import 'diet_generation_options_page.dart';
+import 'upgrade_plan_page.dart';
 import 'user_details_page.dart';
 
 class DietPlanPage extends StatefulWidget {
@@ -280,8 +281,9 @@ class _DietPlanPageState extends State<DietPlanPage> {
                     );
                     break;
                   case _PlanMenuAction.upgradePlan:
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text("Upgrade options are coming soon.")),
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => const UpgradePlanPage()),
                     );
                     break;
                   case _PlanMenuAction.about:

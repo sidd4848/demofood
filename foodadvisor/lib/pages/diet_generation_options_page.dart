@@ -4,6 +4,7 @@ import '../models/app_data.dart';
 import '../services/profile_service.dart';
 import '../theme.dart';
 import 'diet_plan_page.dart';
+import 'upgrade_plan_page.dart';
 
 class DietGenerationOptionsPage extends StatefulWidget {
   final AppData data;
@@ -74,8 +75,31 @@ class _DietGenerationOptionsPageState extends State<DietGenerationOptionsPage> {
               description: "Hand-crafted guidance from a nutrition professional.",
               icon: Icons.health_and_safety_rounded,
               accent: kSecondary,
-              onTap: null,
-              disabledLabel: "Coming soon",
+              onTap: () {
+                showDialog<void>(
+                  context: context,
+                  builder: (_) => AlertDialog(
+                    title: const Text("Upgrade plan"),
+                    content: const Text("Nutritionist plans are available with a paid upgrade."),
+                    actions: [
+                      TextButton(
+                        onPressed: () => Navigator.pop(context),
+                        child: const Text("Back"),
+                      ),
+                      FilledButton(
+                        onPressed: () {
+                          Navigator.pop(context);
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(builder: (_) => const UpgradePlanPage()),
+                          );
+                        },
+                        child: const Text("Upgrade plan"),
+                      ),
+                    ],
+                  ),
+                );
+              },
             ),
             const SizedBox(height: 16),
             _OptionCard(
