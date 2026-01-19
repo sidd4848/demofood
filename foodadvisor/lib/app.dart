@@ -140,7 +140,7 @@ class _SignInCardState extends State<_SignInCard> {
     if (resetData) {
       widget.data.reset();
     }
-    Navigator.push(
+    Navigator.pushAndRemoveUntil(
       context,
       MaterialPageRoute(
         builder: (_) => UserDetailsPage(
@@ -148,11 +148,12 @@ class _SignInCardState extends State<_SignInCard> {
           nextPageBuilder: (_) => PreferencesPage(data: widget.data),
         ),
       ),
+      (_) => false,
     );
   }
 
   void _navigateToDietPlan() {
-    Navigator.push(
+    Navigator.pushAndRemoveUntil(
       context,
       MaterialPageRoute(
         builder: (_) => DietPlanPage(
@@ -160,13 +161,17 @@ class _SignInCardState extends State<_SignInCard> {
           preferencesBuilder: (_) => PreferencesPage(data: widget.data),
         ),
       ),
+      (_) => false,
     );
   }
 
   Future<void> _routeAfterSignIn() async {
+    final dietPlan = await fetchDietPlan();
     final hasProfile = await hasExistingProfile();
     if (!mounted) return;
-    if (hasProfile) {
+    if (dietPlan != null) {
+      _navigateToDietPlan();
+    } else if (hasProfile) {
       _navigateToDietPlan();
     } else {
       _showMessage("Welcome! Let's finish setting up your profile.");
