@@ -403,6 +403,7 @@ class _DietPlanPageState extends State<DietPlanPage> {
                   data: widget.data,
                   editablePlan: _editablePlan,
                   deficitController: _selfDeficitController,
+                  preferencesBuilder: widget.preferencesBuilder,
                   onUpdate: () => setState(() {}),
                   onUpdateProfile: () {
                     widget.data.reset();
@@ -508,13 +509,11 @@ class _DietPlanPageState extends State<DietPlanPage> {
                         plan: plan,
                         status: status,
                         recipesGenerated: recipesGenerated,
-                        onGenerateRecipes: plan.isFuture
-                            ? null
-                            : () {
-                                setState(() {
-                                  _generatedRecipes.add(dateKey);
-                                });
-                              },
+                        onGenerateRecipes: () {
+                          setState(() {
+                            _generatedRecipes.add(dateKey);
+                          });
+                        },
                         onViewRecipes: () {
                           showDialog<void>(
                             context: context,
@@ -1135,7 +1134,14 @@ class _PlanContinuationCard extends StatelessWidget {
                 Expanded(
                   child: OutlinedButton(
                     onPressed: onCopy,
-                    child: const Text("Copy for next 7 days"),
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 12),
+                    ),
+                    child: const Text(
+                      "Copy for next 7 days",
+                      textAlign: TextAlign.center,
+                      maxLines: 2,
+                    ),
                   ),
                 ),
                 const SizedBox(width: 12),
@@ -1352,6 +1358,10 @@ class _DayPlanCard extends StatelessWidget {
                 ),
               ),
             ),
+            if (!plan.isFuture && status == _DayCompletionStatus.pending) ...[
+              const SizedBox(height: 6),
+              const _SwipeHint(),
+            ],
             const SizedBox(height: 12),
             Row(
               children: [
@@ -1378,7 +1388,7 @@ class _DayPlanCard extends StatelessWidget {
 
   Color _statusColor(BuildContext context) {
     if (plan.isFuture) {
-      return Colors.grey.shade100;
+      return Theme.of(context).cardColor;
     }
     switch (status) {
       case _DayCompletionStatus.completed:
@@ -1386,8 +1396,60 @@ class _DayPlanCard extends StatelessWidget {
       case _DayCompletionStatus.missed:
         return Colors.red.shade50;
       case _DayCompletionStatus.pending:
-        return Theme.of(context).cardColor;
+        return Colors.grey.shade100;
     }
+  }
+}
+
+class _SwipeHint extends StatefulWidget {
+  const _SwipeHint();
+
+  @override
+  State<_SwipeHint> createState() => _SwipeHintState();
+}
+
+class _SwipeHintState extends State<_SwipeHint> with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+  late final Animation<Offset> _slide;
+  late final Animation<double> _fade;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1200),
+    )..repeat(reverse: true);
+    final curved = CurvedAnimation(parent: _controller, curve: Curves.easeInOut);
+    _slide = Tween<Offset>(begin: const Offset(-0.08, 0), end: const Offset(0.08, 0)).animate(curved);
+    _fade = Tween<double>(begin: 0.45, end: 1).animate(curved);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FadeTransition(
+      opacity: _fade,
+      child: SlideTransition(
+        position: _slide,
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.swipe, size: 18, color: Colors.grey.shade600),
+            const SizedBox(width: 6),
+            Text(
+              "Swipe to mark completed or not completed",
+              style: TextStyle(fontSize: 12, color: Colors.grey.shade600, fontWeight: FontWeight.w600),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }
 
