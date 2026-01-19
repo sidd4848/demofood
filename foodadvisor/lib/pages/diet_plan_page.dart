@@ -403,6 +403,7 @@ class _DietPlanPageState extends State<DietPlanPage> {
                   data: widget.data,
                   editablePlan: _editablePlan,
                   deficitController: _selfDeficitController,
+                  preferencesBuilder: widget.preferencesBuilder,
                   onUpdate: () => setState(() {}),
                   onUpdateProfile: () {
                     widget.data.reset();
