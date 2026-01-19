@@ -1,10 +1,14 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 
+import '../app.dart';
 import '../models/app_data.dart';
 import '../services/profile_service.dart';
 import '../theme.dart';
 import '../widgets/form_widgets.dart';
+import 'diet_generation_options_page.dart';
+import 'upgrade_plan_page.dart';
 import 'user_details_page.dart';
 
 class DietPlanPage extends StatefulWidget {
@@ -18,8 +22,12 @@ class DietPlanPage extends StatefulWidget {
 
 class _DietPlanPageState extends State<DietPlanPage> {
   late Future<_DietPlanBundle> _dietPlanFuture;
+  DietPlanData? _cachedPlan;
   final Map<String, String> _editablePlan = {};
   final TextEditingController _selfDeficitController = TextEditingController(text: '300');
+  bool _hasRoutedMissingUserId = false;
+  final Map<String, _DayCompletionStatus> _dayStatuses = {};
+  final Set<String> _generatedRecipes = {};
 
   @override
   void initState() {
@@ -40,8 +48,13 @@ class _DietPlanPageState extends State<DietPlanPage> {
       fetchDietGenerationChoice(),
       fetchProfileJobId(),
     ]);
+    final plan = results[0] as DietPlanData?;
+    if (plan != null) {
+      _cachedPlan = plan;
+    }
+    final resolvedPlan = plan ?? _cachedPlan;
     return _DietPlanBundle(
-      plan: results[0] as DietPlanData?,
+      plan: resolvedPlan,
       profile: results[1] as UserProfileSummary?,
       choice: results[2] as DietGenerationChoice?,
       jobId: results[3] as String?,
@@ -51,6 +64,35 @@ class _DietPlanPageState extends State<DietPlanPage> {
   void _refreshPlan() {
     setState(() {
       _dietPlanFuture = _fetchBundle();
+    });
+  }
+
+  void _routeMissingUserId(UserProfileSummary? profile) {
+    if (_hasRoutedMissingUserId) return;
+    _hasRoutedMissingUserId = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      if (profile == null) {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (_) => UserDetailsPage(
+              data: widget.data,
+              nextPageBuilder: widget.preferencesBuilder,
+            ),
+          ),
+        );
+        return;
+      }
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (_) => DietGenerationOptionsPage(
+            data: widget.data,
+            preferencesBuilder: widget.preferencesBuilder,
+          ),
+        ),
+      );
     });
   }
 
@@ -72,6 +114,16 @@ class _DietPlanPageState extends State<DietPlanPage> {
     return bmr * 0.85;
   }
 
+  DateTime _startDateForPlan(DietPlanData? dietPlan) {
+    final startDate = dietPlan?.startDate;
+    if (startDate != null) {
+      return DateTime(startDate.year, startDate.month, startDate.day);
+    }
+    final generatedAt = dietPlan?.generatedAt ?? DateTime.now();
+    final normalized = DateTime(generatedAt.year, generatedAt.month, generatedAt.day);
+    return normalized.add(const Duration(days: 1));
+  }
+
   List<_DayPlan> _dayPlans(DietPlanData? dietPlan) {
     final fallbackMeals = [
       ["Greek yogurt + fruit", "Millet bowl + greens", "Grilled paneer + veggies"],
@@ -84,9 +136,11 @@ class _DietPlanPageState extends State<DietPlanPage> {
     ];
 
     final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final startDate = _startDateForPlan(dietPlan);
     final plans = <_DayPlan>[];
     for (var i = 0; i < 7; i++) {
-      final day = now.add(Duration(days: i));
+      final day = startDate.add(Duration(days: i));
       final key = _weekdayKey(day.weekday);
       final breakfast = dietPlan?.plan['${key}_breakfast'];
       final lunch = dietPlan?.plan['${key}_lunch'];
@@ -98,6 +152,8 @@ class _DietPlanPageState extends State<DietPlanPage> {
         _DayPlan(
           date: day,
           meals: meals,
+          isPast: day.isBefore(today),
+          isFuture: day.isAfter(today),
         ),
       );
     }
@@ -128,6 +184,10 @@ class _DietPlanPageState extends State<DietPlanPage> {
   void _ensureEditablePlan(Map<String, String> source) {
     if (_editablePlan.isNotEmpty) return;
     _editablePlan.addAll(source);
+  }
+
+  String _dateKey(DateTime date) {
+    return '${date.year}-${date.month}-${date.day}';
   }
 
   Future<void> _editDay(BuildContext context, String dayKey) async {
@@ -197,146 +257,153 @@ class _DietPlanPageState extends State<DietPlanPage> {
   Widget build(BuildContext context) {
     final user = FirebaseAuth.instance.currentUser;
 
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text("Diet details"),
-        actions: [
-          IconButton(
-            tooltip: "Refresh",
-            onPressed: _refreshPlan,
-            icon: const Icon(Icons.refresh_rounded),
-          ),
-        ],
-      ),
-      body: SafeArea(
-        child: FutureBuilder<_DietPlanBundle>(
-          future: _dietPlanFuture,
-          builder: (context, snapshot) {
-            if (snapshot.connectionState == ConnectionState.waiting) {
-              return const Center(child: CircularProgressIndicator());
-            }
-            if (snapshot.hasError) {
-              return Center(
-                child: Text(
-                  "Unable to load diet plan: ${snapshot.error}",
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(color: Colors.redAccent),
-                ),
-              );
-            }
-
-            final profile = snapshot.data?.profile;
-            final dietPlan = snapshot.data?.plan;
-            final choice = snapshot.data?.choice;
-            final jobId = snapshot.data?.jobId;
-            final bmr = _bmrForProfile(profile);
-            final deficit = dietPlan?.calorieDeficit ?? _calorieDeficit(bmr)?.round();
-
-            if (choice == null) {
-              return const _DietLoadingState(
-                message: "Pick a diet generation style to continue.",
-              );
-            }
-
-            if (choice.generatedBy == 'expert') {
-              return const _DietLoadingState(
-                message: "Expert nutritionist plans are coming soon.",
-              );
-            }
-
-            if (choice.generatedBy == 'self') {
-              final source = dietPlan?.plan ?? _fallbackPlanMap();
-              _ensureEditablePlan(source);
-              return _SelfPlanEditor(
-                editablePlan: _editablePlan,
-                deficitController: _selfDeficitController,
-                onUpdate: () => setState(() {}),
-                onSave: jobId == null
-                    ? null
-                    : () async {
-                        final deficitValue = int.tryParse(_selfDeficitController.text.trim()) ?? 300;
-                        await saveSelfDietPlan(
-                          jobId: jobId,
-                          calorieDeficit: deficitValue,
-                          plan: _editablePlan,
-                        );
-                      },
-              );
-            }
-
-            if (dietPlan == null) {
-              return const _DietLoadingState(
-                message: "Diet is loading soon.",
-              );
-            }
-
-            final plans = _dayPlans(dietPlan);
-            _ensureEditablePlan(dietPlan.plan);
-
-            return ListView(
-              padding: const EdgeInsets.all(20),
-              children: [
-                _DietHeader(
-                  title: "FoodAdvisor",
-                  subtitle: user?.email ?? "Welcome back",
-                ),
-                const SizedBox(height: 16),
-                _GreetingCard(
-                  name: profile?.name.isNotEmpty == true ? profile!.name : (user?.displayName ?? "Friend"),
-                  note: "Your next 7 days are planned for balanced energy and steady calorie deficit.",
-                ),
-                const SizedBox(height: 16),
-                _MetricsCard(
-                  bmr: bmr,
-                  deficitTarget: deficit?.toDouble(),
-                ),
-                const SizedBox(height: 18),
-                const SectionTitle(
-                  title: "7-day diet plan",
-                  subtitle: "From today through the next 7 days.",
-                ),
-                const SizedBox(height: 12),
-                ...plans.map((plan) => _DayPlanCard(
-                      plan: plan,
-                      onEdit: () => _editDay(context, _weekdayKey(plan.date.weekday)),
-                    )),
-                const SizedBox(height: 18),
-                Card(
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
-                  child: Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text(
-                          "Schedule reminder",
-                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
+    return WillPopScope(
+      onWillPop: () async => false,
+      child: Scaffold(
+        appBar: AppBar(
+          title: const Text("Diet details"),
+          automaticallyImplyLeading: false,
+          actions: [
+            IconButton(
+              tooltip: "Refresh",
+              onPressed: _refreshPlan,
+              icon: const Icon(Icons.refresh_rounded),
+            ),
+            PopupMenuButton<_PlanMenuAction>(
+              onSelected: (action) async {
+                switch (action) {
+                  case _PlanMenuAction.updateDetails:
+                    widget.data.reset();
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => UserDetailsPage(
+                          data: widget.data,
+                          nextPageBuilder: widget.preferencesBuilder,
                         ),
-                        const SizedBox(height: 6),
-                        Text(
-                          "WhatsApp reminders are coming soon.",
-                          style: TextStyle(color: Colors.grey.shade700),
+                      ),
+                    );
+                    break;
+                  case _PlanMenuAction.upgradePlan:
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => const UpgradePlanPage()),
+                    );
+                    break;
+                  case _PlanMenuAction.about:
+                    showDialog<void>(
+                      context: context,
+                      builder: (_) => AlertDialog(
+                        title: const Text("About FoodAdvisor"),
+                        content: const Text(
+                          "FoodAdvisor helps you stay consistent with balanced meal plans and daily progress.",
                         ),
-                        const SizedBox(height: 12),
-                        SizedBox(
-                          width: double.infinity,
-                          child: OutlinedButton.icon(
-                            onPressed: null,
-                            icon: const Icon(Icons.chat_bubble_outline_rounded),
-                            label: const Text("Enable WhatsApp reminders"),
+                        actions: [
+                          TextButton(
+                            onPressed: () => Navigator.pop(context),
+                            child: const Text("Close"),
                           ),
-                        ),
-                      ],
-                    ),
+                        ],
+                      ),
+                    );
+                    break;
+                  case _PlanMenuAction.signOut:
+                    await FirebaseAuth.instance.signOut();
+                    await GoogleSignIn().signOut();
+                    if (!mounted) return;
+                    Navigator.pushAndRemoveUntil(
+                      context,
+                      MaterialPageRoute(builder: (_) => LandingPage(data: widget.data)),
+                      (_) => false,
+                    );
+                    break;
+                }
+              },
+              itemBuilder: (context) => const [
+                PopupMenuItem(
+                  value: _PlanMenuAction.updateDetails,
+                  child: ListTile(
+                    leading: Icon(Icons.manage_accounts_outlined),
+                    title: Text("Update details"),
                   ),
                 ),
-                const SizedBox(height: 18),
-                FilledButton.tonal(
-                  style: FilledButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                PopupMenuItem(
+                  value: _PlanMenuAction.upgradePlan,
+                  child: ListTile(
+                    leading: Icon(Icons.workspace_premium_outlined),
+                    title: Text("Upgrade plan"),
                   ),
-                  onPressed: () {
+                ),
+                PopupMenuItem(
+                  value: _PlanMenuAction.about,
+                  child: ListTile(
+                    leading: Icon(Icons.info_outline),
+                    title: Text("About"),
+                  ),
+                ),
+                PopupMenuDivider(),
+                PopupMenuItem(
+                  value: _PlanMenuAction.signOut,
+                  child: ListTile(
+                    leading: Icon(Icons.logout_rounded),
+                    title: Text("Sign out"),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+        body: SafeArea(
+          child: FutureBuilder<_DietPlanBundle>(
+            future: _dietPlanFuture,
+            builder: (context, snapshot) {
+              if (snapshot.connectionState == ConnectionState.waiting) {
+                return const Center(child: CircularProgressIndicator());
+              }
+              if (snapshot.hasError) {
+                return Center(
+                  child: Text(
+                    "Unable to load diet plan: ${snapshot.error}",
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(color: Colors.redAccent),
+                  ),
+                );
+              }
+
+              final profile = snapshot.data?.profile;
+              final dietPlan = snapshot.data?.plan;
+              final choice = snapshot.data?.choice;
+              final jobId = snapshot.data?.jobId;
+              final bmr = _bmrForProfile(profile);
+              final deficit = dietPlan?.calorieDeficit ?? _calorieDeficit(bmr)?.round();
+
+              if (dietPlan != null && dietPlan.userId == null) {
+                _routeMissingUserId(profile);
+                return const _DietLoadingState(
+                  message: "Updating your plan details.",
+                );
+              }
+
+              if (choice == null) {
+                return const _DietLoadingState(
+                  message: "Pick a diet generation style to continue.",
+                );
+              }
+
+              if (choice.generatedBy == 'expert') {
+                return const _DietLoadingState(
+                  message: "Expert nutritionist plans are coming soon.",
+                );
+              }
+
+              if (choice.generatedBy == 'self' && dietPlan == null) {
+                final source = dietPlan?.plan ?? _fallbackPlanMap();
+                _ensureEditablePlan(source);
+                return _SelfPlanEditor(
+                  editablePlan: _editablePlan,
+                  deficitController: _selfDeficitController,
+                  onUpdate: () => setState(() {}),
+                  onUpdateProfile: () {
                     widget.data.reset();
                     Navigator.push(
                       context,
@@ -348,16 +415,178 @@ class _DietPlanPageState extends State<DietPlanPage> {
                       ),
                     );
                   },
-                  child: const Text("Update profile"),
-                ),
-              ],
-            );
-          },
+                  onSave: jobId == null
+                      ? null
+                      : (startDate) async {
+                          final deficitValue = int.tryParse(_selfDeficitController.text.trim()) ?? 300;
+                          await saveSelfDietPlan(
+                            jobId: jobId,
+                            calorieDeficit: deficitValue,
+                            plan: _editablePlan,
+                            startDate: startDate,
+                          );
+                          _refreshPlan();
+                        },
+                );
+              }
+
+              if (dietPlan == null) {
+                return const _DietLoadingState(
+                  message: "Diet is loading soon.",
+                );
+              }
+
+              final plans = _dayPlans(dietPlan);
+              _ensureEditablePlan(dietPlan.plan);
+              const bottomBarHeight = 140.0;
+              final planList = ListView(
+                padding: const EdgeInsets.fromLTRB(20, 20, 20, bottomBarHeight),
+                children: [
+                  _DietHeader(
+                    title: "FoodAdvisor",
+                    subtitle: user?.email ?? "Welcome back",
+                  ),
+                  const SizedBox(height: 16),
+                  _GreetingCard(
+                    name: profile?.name.isNotEmpty == true ? profile!.name : (user?.displayName ?? "Friend"),
+                    note: "Your next 7 days are planned for balanced energy and steady calorie deficit.",
+                  ),
+                  const SizedBox(height: 12),
+                  _FinalizePlanActions(
+                    onGenerateAi: () async {
+                      await saveDietGenerationChoice('ai');
+                      if (!context.mounted) return;
+                      _refreshPlan();
+                    },
+                    onNutritionist: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (_) => const UpgradePlanPage()),
+                      );
+                    },
+                  ),
+                  const SizedBox(height: 16),
+                  _MetricsCard(
+                    bmr: bmr,
+                    deficitTarget: deficit?.toDouble(),
+                  ),
+                  const SizedBox(height: 18),
+                  const SectionTitle(
+                    title: "7-day diet plan",
+                    subtitle: "Swipe right for completed, left for not completed.",
+                  ),
+                  const SizedBox(height: 12),
+                  ...plans.map((plan) {
+                    final dateKey = _dateKey(plan.date);
+                    final status = _dayStatuses[dateKey] ?? _DayCompletionStatus.pending;
+                    final recipesGenerated = _generatedRecipes.contains(dateKey);
+                    return Dismissible(
+                      key: ValueKey(dateKey),
+                      direction: plan.isFuture ? DismissDirection.none : DismissDirection.horizontal,
+                      confirmDismiss: (direction) async {
+                        setState(() {
+                          _dayStatuses[dateKey] = direction == DismissDirection.startToEnd
+                              ? _DayCompletionStatus.completed
+                              : _DayCompletionStatus.missed;
+                        });
+                        return false;
+                      },
+                      background: _SwipeStatusBackground(
+                        label: "Completed",
+                        color: Colors.green.shade100,
+                        icon: Icons.check_circle_outline,
+                        alignment: Alignment.centerLeft,
+                      ),
+                      secondaryBackground: _SwipeStatusBackground(
+                        label: "Not completed",
+                        color: Colors.red.shade100,
+                        icon: Icons.highlight_off,
+                        alignment: Alignment.centerRight,
+                      ),
+                      child: _DayPlanCard(
+                        plan: plan,
+                        status: status,
+                        recipesGenerated: recipesGenerated,
+                        onGenerateRecipes: plan.isFuture
+                            ? null
+                            : () {
+                                setState(() {
+                                  _generatedRecipes.add(dateKey);
+                                });
+                              },
+                        onViewRecipes: () {
+                          showDialog<void>(
+                            context: context,
+                            builder: (_) => AlertDialog(
+                              title: const Text("Recipes"),
+                              content: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: plan.meals
+                                    .map(
+                                      (meal) => ListTile(
+                                        contentPadding: EdgeInsets.zero,
+                                        leading: const Icon(Icons.restaurant_menu_rounded),
+                                        title: Text(meal),
+                                        subtitle: const Text("Recipe details coming soon."),
+                                      ),
+                                    )
+                                    .toList(),
+                              ),
+                              actions: [
+                                TextButton(
+                                  onPressed: () => Navigator.pop(context),
+                                  child: const Text("Close"),
+                                ),
+                              ],
+                            ),
+                          );
+                        },
+                        onEdit: () => _editDay(context, _weekdayKey(plan.date.weekday)),
+                      ),
+                    );
+                  }),
+                  const SizedBox(height: 18),
+                  _PlanContinuationCard(
+                    onCopy: () {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text("Plan copied for the next 7 days.")),
+                      );
+                    },
+                    onGenerateNew: () {
+                      Navigator.pushReplacement(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => DietGenerationOptionsPage(
+                            data: widget.data,
+                            preferencesBuilder: widget.preferencesBuilder,
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ],
+              );
+
+              return Stack(
+                children: [
+                  planList,
+                  Positioned(
+                    left: 20,
+                    right: 20,
+                    bottom: 12,
+                    child: _WhatsAppReminderBar(),
+                  ),
+                ],
+              );
+            },
+          ),
         ),
       ),
     );
   }
 }
+
+enum _PlanMenuAction { updateDetails, upgradePlan, about, signOut }
 
 class _DietPlanBundle {
   final DietPlanData? plan;
@@ -411,18 +640,96 @@ class _DietLoadingState extends StatelessWidget {
   }
 }
 
-class _SelfPlanEditor extends StatelessWidget {
+class _SelfPlanEditor extends StatefulWidget {
   final Map<String, String> editablePlan;
   final TextEditingController deficitController;
   final VoidCallback onUpdate;
-  final Future<void> Function()? onSave;
+  final VoidCallback onUpdateProfile;
+  final Future<void> Function(DateTime startDate)? onSave;
 
   const _SelfPlanEditor({
     required this.editablePlan,
     required this.deficitController,
     required this.onUpdate,
+    required this.onUpdateProfile,
     required this.onSave,
   });
+
+  @override
+  State<_SelfPlanEditor> createState() => _SelfPlanEditorState();
+}
+
+class _SelfPlanEditorState extends State<_SelfPlanEditor> {
+  bool _isSaving = false;
+
+  Future<DateTime?> _pickStartDate() {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    return showDialog<DateTime>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: const Text("When should the diet start?"),
+          content: SizedBox(
+            width: double.maxFinite,
+            height: 320,
+            child: ListView.builder(
+              itemCount: 15,
+              itemBuilder: (context, index) {
+                final date = today.add(Duration(days: index - 7));
+                final isPast = date.isBefore(today);
+                return ListTile(
+                  title: Text(MaterialLocalizations.of(context).formatMediumDate(date)),
+                  subtitle: Text(isPast ? "Unavailable" : "Available"),
+                  enabled: !isPast,
+                  onTap: isPast ? null : () => Navigator.pop(dialogContext, date),
+                );
+              },
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text("Cancel"),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Future<void> _handleSave() async {
+    if (_isSaving) return;
+    if (widget.onSave == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Unable to save yet. Please try again in a moment.")),
+      );
+      return;
+    }
+    final startDate = await _pickStartDate();
+    if (startDate == null) return;
+    setState(() {
+      _isSaving = true;
+    });
+    try {
+      await widget.onSave?.call(startDate);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Plan saved successfully.")),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Unable to save plan. Please try again.")),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isSaving = false;
+        });
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -448,9 +755,18 @@ class _SelfPlanEditor extends StatelessWidget {
           "Fill in breakfast, lunch, and dinner for each day.",
           style: TextStyle(color: Colors.grey.shade700),
         ),
+        const SizedBox(height: 12),
+        Align(
+          alignment: Alignment.centerRight,
+          child: OutlinedButton.icon(
+            onPressed: widget.onUpdateProfile,
+            icon: const Icon(Icons.manage_accounts_outlined),
+            label: const Text("Update details"),
+          ),
+        ),
         const SizedBox(height: 16),
         TextField(
-          controller: deficitController,
+          controller: widget.deficitController,
           keyboardType: TextInputType.number,
           decoration: const InputDecoration(labelText: "Calorie deficit (kcal)"),
         ),
@@ -468,28 +784,28 @@ class _SelfPlanEditor extends StatelessWidget {
                   const SizedBox(height: 8),
                   _SelfMealField(
                     label: "Breakfast",
-                    initialValue: editablePlan['${key}_breakfast'] ?? '',
+                    initialValue: widget.editablePlan['${key}_breakfast'] ?? '',
                     onChanged: (value) {
-                      editablePlan['${key}_breakfast'] = value;
-                      onUpdate();
+                      widget.editablePlan['${key}_breakfast'] = value;
+                      widget.onUpdate();
                     },
                   ),
                   const SizedBox(height: 10),
                   _SelfMealField(
                     label: "Lunch",
-                    initialValue: editablePlan['${key}_lunch'] ?? '',
+                    initialValue: widget.editablePlan['${key}_lunch'] ?? '',
                     onChanged: (value) {
-                      editablePlan['${key}_lunch'] = value;
-                      onUpdate();
+                      widget.editablePlan['${key}_lunch'] = value;
+                      widget.onUpdate();
                     },
                   ),
                   const SizedBox(height: 10),
                   _SelfMealField(
                     label: "Dinner",
-                    initialValue: editablePlan['${key}_dinner'] ?? '',
+                    initialValue: widget.editablePlan['${key}_dinner'] ?? '',
                     onChanged: (value) {
-                      editablePlan['${key}_dinner'] = value;
-                      onUpdate();
+                      widget.editablePlan['${key}_dinner'] = value;
+                      widget.onUpdate();
                     },
                   ),
                 ],
@@ -499,8 +815,14 @@ class _SelfPlanEditor extends StatelessWidget {
         }),
         const SizedBox(height: 16),
         FilledButton(
-          onPressed: onSave,
-          child: const Text("Save plan"),
+          onPressed: _handleSave,
+          child: _isSaving
+              ? const SizedBox(
+                  height: 18,
+                  width: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Text("Save plan"),
         ),
       ],
     );
@@ -573,6 +895,126 @@ class _DietHeader extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _FinalizePlanActions extends StatelessWidget {
+  final VoidCallback onNutritionist;
+  final VoidCallback onGenerateAi;
+
+  const _FinalizePlanActions({
+    required this.onNutritionist,
+    required this.onGenerateAi,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Expanded(
+          child: OutlinedButton.icon(
+            onPressed: onGenerateAi,
+            icon: const Icon(Icons.auto_awesome_outlined),
+            label: const Text("Generate by AI"),
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: FilledButton.icon(
+            onPressed: onNutritionist,
+            icon: const Icon(Icons.health_and_safety_outlined),
+            label: const Text("Nutritionist"),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _WhatsAppReminderBar extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              "Schedule reminder",
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              "WhatsApp reminders are coming soon.",
+              style: TextStyle(color: Colors.grey.shade700),
+            ),
+            const SizedBox(height: 12),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: null,
+                icon: const Icon(Icons.chat_bubble_outline_rounded),
+                label: const Text("Enable WhatsApp reminders"),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _PlanContinuationCard extends StatelessWidget {
+  final VoidCallback onCopy;
+  final VoidCallback onGenerateNew;
+
+  const _PlanContinuationCard({
+    required this.onCopy,
+    required this.onGenerateNew,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              "Continue your plan",
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              "After 7 days, you can reuse this plan or generate a fresh one.",
+              style: TextStyle(color: Colors.grey.shade700),
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: onCopy,
+                    child: const Text("Copy for next 7 days"),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: FilledButton(
+                    onPressed: onGenerateNew,
+                    child: const Text("Generate new"),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -683,14 +1125,35 @@ class _MetricTile extends StatelessWidget {
 class _DayPlan {
   final DateTime date;
   final List<String> meals;
+  final bool isPast;
+  final bool isFuture;
 
-  const _DayPlan({required this.date, required this.meals});
+  const _DayPlan({
+    required this.date,
+    required this.meals,
+    required this.isPast,
+    required this.isFuture,
+  });
 }
+
+enum _DayCompletionStatus { pending, completed, missed }
 
 class _DayPlanCard extends StatelessWidget {
   final _DayPlan plan;
+  final _DayCompletionStatus status;
+  final bool recipesGenerated;
   final VoidCallback onEdit;
-  const _DayPlanCard({required this.plan, required this.onEdit});
+  final VoidCallback? onGenerateRecipes;
+  final VoidCallback onViewRecipes;
+
+  const _DayPlanCard({
+    required this.plan,
+    required this.status,
+    required this.recipesGenerated,
+    required this.onEdit,
+    required this.onGenerateRecipes,
+    required this.onViewRecipes,
+  });
 
   static const weekDays = [
     "Monday",
@@ -706,9 +1169,11 @@ class _DayPlanCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final weekday = weekDays[plan.date.weekday - 1];
     final dateLabel = "${plan.date.day}/${plan.date.month}";
+    final backgroundColor = _statusColor(context);
 
     return Card(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
+      color: backgroundColor,
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
@@ -732,11 +1197,12 @@ class _DayPlanCard extends StatelessWidget {
                   dateLabel,
                   style: TextStyle(color: Colors.grey.shade600),
                 ),
-                IconButton(
-                  tooltip: "Edit meals",
-                  onPressed: onEdit,
-                  icon: const Icon(Icons.edit_outlined),
-                ),
+                if (!plan.isFuture)
+                  IconButton(
+                    tooltip: "Edit meals",
+                    onPressed: onEdit,
+                    icon: const Icon(Icons.edit_outlined),
+                  ),
               ],
             ),
             const SizedBox(height: 12),
@@ -752,8 +1218,114 @@ class _DayPlanCard extends StatelessWidget {
                 ),
               ),
             ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                _StatusPill(status: status, isFuture: plan.isFuture),
+                const Spacer(),
+                if (!recipesGenerated)
+                  FilledButton.tonalIcon(
+                    onPressed: onGenerateRecipes,
+                    icon: const Icon(Icons.auto_awesome_outlined),
+                    label: const Text("Generate recipes"),
+                  )
+                else
+                  TextButton(
+                    onPressed: onViewRecipes,
+                    child: const Text("View recipes"),
+                  ),
+              ],
+            ),
           ],
         ),
+      ),
+    );
+  }
+
+  Color _statusColor(BuildContext context) {
+    if (plan.isFuture) {
+      return Colors.grey.shade100;
+    }
+    switch (status) {
+      case _DayCompletionStatus.completed:
+        return Colors.green.shade50;
+      case _DayCompletionStatus.missed:
+        return Colors.red.shade50;
+      case _DayCompletionStatus.pending:
+        return Theme.of(context).cardColor;
+    }
+  }
+}
+
+class _StatusPill extends StatelessWidget {
+  final _DayCompletionStatus status;
+  final bool isFuture;
+
+  const _StatusPill({required this.status, required this.isFuture});
+
+  @override
+  Widget build(BuildContext context) {
+    String label;
+    Color color;
+    if (isFuture) {
+      label = "Upcoming";
+      color = Colors.grey.shade500;
+    } else {
+      switch (status) {
+        case _DayCompletionStatus.completed:
+          label = "Completed";
+          color = Colors.green.shade700;
+          break;
+        case _DayCompletionStatus.missed:
+          label = "Not completed";
+          color = Colors.red.shade700;
+          break;
+        case _DayCompletionStatus.pending:
+          label = "Pending";
+          color = Colors.orange.shade700;
+          break;
+      }
+    }
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(999),
+        color: color.withOpacity(0.12),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(fontWeight: FontWeight.w700, color: color),
+      ),
+    );
+  }
+}
+
+class _SwipeStatusBackground extends StatelessWidget {
+  final String label;
+  final Color color;
+  final IconData icon;
+  final Alignment alignment;
+
+  const _SwipeStatusBackground({
+    required this.label,
+    required this.color,
+    required this.icon,
+    required this.alignment,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      alignment: alignment,
+      color: color,
+      padding: const EdgeInsets.symmetric(horizontal: 20),
+      child: Row(
+        mainAxisAlignment: alignment == Alignment.centerLeft ? MainAxisAlignment.start : MainAxisAlignment.end,
+        children: [
+          Icon(icon, color: Colors.black87),
+          const SizedBox(width: 8),
+          Text(label, style: const TextStyle(fontWeight: FontWeight.w600)),
+        ],
       ),
     );
   }
