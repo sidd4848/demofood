@@ -400,10 +400,8 @@ class _DietPlanPageState extends State<DietPlanPage> {
                 final source = dietPlan?.plan ?? _fallbackPlanMap();
                 _ensureEditablePlan(source);
                 return _SelfPlanEditor(
-                  data: widget.data,
                   editablePlan: _editablePlan,
                   deficitController: _selfDeficitController,
-                  preferencesBuilder: widget.preferencesBuilder,
                   onUpdate: () => setState(() {}),
                   onUpdateProfile: () {
                     widget.data.reset();
@@ -452,6 +450,20 @@ class _DietPlanPageState extends State<DietPlanPage> {
                   _GreetingCard(
                     name: profile?.name.isNotEmpty == true ? profile!.name : (user?.displayName ?? "Friend"),
                     note: "Your next 7 days are planned for balanced energy and steady calorie deficit.",
+                  ),
+                  const SizedBox(height: 12),
+                  _FinalizePlanActions(
+                    onGenerateAi: () async {
+                      await saveDietGenerationChoice('ai');
+                      if (!context.mounted) return;
+                      _refreshPlan();
+                    },
+                    onNutritionist: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (_) => const UpgradePlanPage()),
+                      );
+                    },
                   ),
                   const SizedBox(height: 16),
                   _MetricsCard(
@@ -629,7 +641,6 @@ class _DietLoadingState extends StatelessWidget {
 }
 
 class _SelfPlanEditor extends StatefulWidget {
-  final AppData data;
   final Map<String, String> editablePlan;
   final TextEditingController deficitController;
   final WidgetBuilder preferencesBuilder;
@@ -708,15 +719,6 @@ class _SelfPlanEditorState extends State<_SelfPlanEditor> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text("Plan saved successfully.")),
-      );
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(
-          builder: (_) => _SelfPlanNextStepPage(
-            data: widget.data,
-            preferencesBuilder: widget.preferencesBuilder,
-          ),
-        ),
       );
     } catch (_) {
       if (!mounted) return;
@@ -1026,6 +1028,39 @@ class _DietHeader extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+class _FinalizePlanActions extends StatelessWidget {
+  final VoidCallback onNutritionist;
+  final VoidCallback onGenerateAi;
+
+  const _FinalizePlanActions({
+    required this.onNutritionist,
+    required this.onGenerateAi,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Expanded(
+          child: OutlinedButton.icon(
+            onPressed: onGenerateAi,
+            icon: const Icon(Icons.auto_awesome_outlined),
+            label: const Text("Generate by AI"),
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: FilledButton.icon(
+            onPressed: onNutritionist,
+            icon: const Icon(Icons.health_and_safety_outlined),
+            label: const Text("Nutritionist"),
+          ),
+        ),
+      ],
     );
   }
 }
