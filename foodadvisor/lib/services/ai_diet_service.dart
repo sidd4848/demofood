@@ -13,11 +13,18 @@ class AiDietService {
     final snapshot = await FirebaseFirestore.instance
         .collection(collectionName)
         .where('userId', isEqualTo: userId)
-        .where('createdAt', isGreaterThanOrEqualTo: Timestamp.fromDate(since))
         .orderBy('createdAt', descending: true)
         .limit(1)
         .get();
-    return snapshot.docs.isNotEmpty;
+    if (snapshot.docs.isEmpty) {
+      return false;
+    }
+    final data = snapshot.docs.first.data();
+    final createdAt = data['createdAt'];
+    if (createdAt is Timestamp) {
+      return createdAt.toDate().isAfter(since);
+    }
+    return false;
   }
 
   Future<DocumentReference<Map<String, dynamic>>> requestPlan({

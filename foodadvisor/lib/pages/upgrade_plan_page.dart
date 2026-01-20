@@ -33,16 +33,8 @@ class UpgradePlanPage extends StatelessWidget {
             return ListView(
               padding: const EdgeInsets.all(20),
               children: [
-                const Text(
-                  'Choose the plan that fits your goals',
-                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  'All paid plans include nutritionist support.',
-                  style: TextStyle(color: Colors.grey.shade700, height: 1.4),
-                ),
-                const SizedBox(height: 16),
+                _UpgradeHero(),
+                const SizedBox(height: 20),
                 _PlanCard(
                   title: 'Free',
                   badge: 'Trial',
@@ -58,7 +50,7 @@ class UpgradePlanPage extends StatelessWidget {
                 const SizedBox(height: 16),
                 _PlanCard(
                   title: 'Pro',
-                  badge: 'Paid',
+                  badge: 'Most popular',
                   priceLabel: _formatPrice(regionPricing, 'pro'),
                   description: const [
                     '7 AI-generated recipes per month',
@@ -67,6 +59,7 @@ class UpgradePlanPage extends StatelessWidget {
                   ],
                   buttonLabel: 'Upgrade to Pro',
                   accent: kPrimary,
+                  highlight: true,
                   onTap: () async {
                     final selection = await _showDurationPicker(
                       context,
@@ -88,7 +81,7 @@ class UpgradePlanPage extends StatelessWidget {
                 const SizedBox(height: 16),
                 _PlanCard(
                   title: 'Elite',
-                  badge: 'Paid',
+                  badge: 'Premium',
                   priceLabel: _formatPrice(regionPricing, 'elite'),
                   description: const [
                     'Everything in Pro',
@@ -138,21 +131,43 @@ class UpgradePlanPage extends StatelessWidget {
     final durations = config.sortedDurations();
     return showModalBottomSheet<_DurationSelection>(
       context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
       builder: (context) {
-        return Padding(
-          padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+        return Container(
+          padding: const EdgeInsets.fromLTRB(20, 12, 20, 32),
+          decoration: BoxDecoration(
+            color: Theme.of(context).cardColor,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+          ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              Center(
+                child: Container(
+                  width: 44,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade300,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
               Text(
                 'Pick a subscription duration',
                 style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: 4),
+              Text(
+                'Save more when you choose longer plans.',
+                style: TextStyle(color: Colors.grey.shade600),
+              ),
+              const SizedBox(height: 16),
               ...durations.map((duration) {
                 final total = basePrice * duration.months;
                 final discount = (total * duration.discountPct / 100).round();
@@ -165,19 +180,41 @@ class UpgradePlanPage extends StatelessWidget {
                   discountPct: duration.discountPct,
                   finalPrice: finalPrice,
                 );
-                return ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  title: Text(duration.label),
-                  subtitle: duration.discountPct > 0
-                      ? Text('Save ${duration.discountPct}%')
-                      : const Text('Standard price'),
-                  trailing: Text(
-                    '${regionPricing.symbol}$finalPrice',
-                    style: const TextStyle(fontWeight: FontWeight.w700),
+                return Container(
+                  margin: const EdgeInsets.only(bottom: 12),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: Colors.grey.shade200),
                   ),
-                  onTap: () => Navigator.pop(
-                    context,
-                    _DurationSelection(duration: duration, price: price),
+                  child: ListTile(
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    title: Text(duration.label, style: const TextStyle(fontWeight: FontWeight.w700)),
+                    subtitle: duration.discountPct > 0
+                        ? Text('Save ${duration.discountPct}%')
+                        : const Text('Standard price'),
+                    trailing: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        Text(
+                          '${regionPricing.symbol}$finalPrice',
+                          style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16),
+                        ),
+                        if (duration.discountPct > 0)
+                          Text(
+                            '${regionPricing.symbol}$total',
+                            style: const TextStyle(
+                              decoration: TextDecoration.lineThrough,
+                              color: Colors.grey,
+                              fontSize: 12,
+                            ),
+                          ),
+                      ],
+                    ),
+                    onTap: () => Navigator.pop(
+                      context,
+                      _DurationSelection(duration: duration, price: price),
+                    ),
                   ),
                 );
               }),
@@ -199,6 +236,7 @@ class _PlanCard extends StatelessWidget {
     required this.accent,
     this.onTap,
     this.buttonEnabled = true,
+    this.highlight = false,
   });
 
   final String title;
@@ -209,42 +247,70 @@ class _PlanCard extends StatelessWidget {
   final Color accent;
   final VoidCallback? onTap;
   final bool buttonEnabled;
+  final bool highlight;
 
   @override
   Widget build(BuildContext context) {
     return Card(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
-      child: Padding(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+      elevation: highlight ? 8 : 2,
+      shadowColor: accent.withOpacity(0.2),
+      child: Container(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(24),
+          border: Border.all(color: highlight ? accent.withOpacity(0.4) : Colors.transparent),
+          gradient: highlight
+              ? LinearGradient(
+                  colors: [accent.withOpacity(0.12), Colors.transparent],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                )
+              : null,
+        ),
         padding: const EdgeInsets.all(18),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
               children: [
-                Text(
-                  title,
-                  style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
+                Container(
+                  height: 40,
+                  width: 40,
+                  decoration: BoxDecoration(
+                    color: accent.withOpacity(0.15),
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  child: Icon(Icons.stars_rounded, color: accent),
                 ),
-                const Spacer(),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    title,
+                    style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
+                  ),
+                ),
                 Text(
                   priceLabel,
-                  style: TextStyle(fontWeight: FontWeight.w700, color: accent),
-                ),
-                const SizedBox(width: 10),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: accent.withOpacity(0.12),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Text(
-                    badge,
-                    style: TextStyle(color: accent, fontWeight: FontWeight.w700),
-                  ),
+                  style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16, color: accent),
                 ),
               ],
             ),
             const SizedBox(height: 10),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: accent.withOpacity(0.12),
+                  borderRadius: BorderRadius.circular(999),
+                ),
+                child: Text(
+                  badge,
+                  style: TextStyle(color: accent, fontWeight: FontWeight.w700),
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
             ...description.map(
               (line) => Padding(
                 padding: const EdgeInsets.only(bottom: 6),
@@ -258,13 +324,14 @@ class _PlanCard extends StatelessWidget {
                 ),
               ),
             ),
-            const SizedBox(height: 12),
-            Align(
-              alignment: Alignment.centerRight,
+            const SizedBox(height: 14),
+            SizedBox(
+              width: double.infinity,
               child: FilledButton(
                 onPressed: buttonEnabled ? onTap : null,
                 style: FilledButton.styleFrom(
                   backgroundColor: accent,
+                  padding: const EdgeInsets.symmetric(vertical: 12),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                 ),
                 child: Text(buttonLabel),
@@ -282,4 +349,51 @@ class _DurationSelection {
   final SubscriptionPrice price;
 
   const _DurationSelection({required this.duration, required this.price});
+}
+
+class _UpgradeHero extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(24),
+        gradient: LinearGradient(
+          colors: [kPrimary, kSecondary],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Upgrade your nutrition',
+                  style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w800),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  'Unlock smarter AI plans, priority support, and weekly check-ins.',
+                  style: TextStyle(color: Colors.white.withOpacity(0.9), height: 1.4),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 12),
+          Container(
+            height: 56,
+            width: 56,
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.2),
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: const Icon(Icons.rocket_launch_rounded, color: Colors.white),
+          ),
+        ],
+      ),
+    );
+  }
 }

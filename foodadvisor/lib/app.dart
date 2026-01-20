@@ -1,5 +1,8 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 
 import 'models/app_data.dart';
@@ -8,6 +11,7 @@ import 'pages/diet_plan_page.dart';
 import 'pages/user_details_page.dart';
 import 'services/profile_service.dart';
 import 'theme.dart';
+import 'theme_config.dart';
 import 'widgets/form_widgets.dart';
 
 class FoodAdvisorApp extends StatefulWidget {
@@ -18,20 +22,53 @@ class FoodAdvisorApp extends StatefulWidget {
 
 class _FoodAdvisorAppState extends State<FoodAdvisorApp> {
   final AppData data = AppData();
+  late Future<AppThemeConfig> _themeFuture;
+  Timer? _splashTimer;
+  bool _showSplash = true;
 
   @override
   void initState() {
     super.initState();
+    _themeFuture = AppThemeConfig.loadFromAsset('assets/theme.yaml');
+    _splashTimer = Timer(const Duration(milliseconds: 1600), () {
+      if (mounted) {
+        setState(() => _showSplash = false);
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _splashTimer?.cancel();
+    super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     return AnimatedBuilder(
       animation: data,
-      builder: (context, _) => MaterialApp(
-        debugShowCheckedModeBanner: false,
-        theme: buildTheme(),
-        home: LandingPage(data: data),
+      builder: (context, _) => FutureBuilder<AppThemeConfig>(
+        future: _themeFuture,
+        builder: (context, snapshot) {
+          final config = snapshot.data ?? AppThemeConfig.fallback();
+          AppThemeConfig.apply(config);
+          return MaterialApp(
+            debugShowCheckedModeBanner: false,
+            theme: buildTheme(config),
+            home: AnimatedSwitcher(
+              duration: const Duration(milliseconds: 400),
+              child: _showSplash
+                  ? SplashScreen(
+                      key: const ValueKey('splash'),
+                      config: config,
+                    )
+                  : LandingPage(
+                      key: const ValueKey('landing'),
+                      data: data,
+                    ),
+            ),
+          );
+        },
       ),
     );
   }
@@ -78,6 +115,7 @@ class LandingPage extends StatelessWidget {
 class _PremiumHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
+    final config = AppThemeConfig.current;
     return Row(
       children: [
         Container(
@@ -85,16 +123,19 @@ class _PremiumHeader extends StatelessWidget {
           width: 44,
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(14),
-            gradient: const LinearGradient(
+            gradient: LinearGradient(
               colors: [kPrimary, kSecondary],
             ),
           ),
-          child: const Icon(Icons.restaurant_rounded, color: Colors.white),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(12),
+            child: _LogoImage(asset: config.logoAsset),
+          ),
         ),
         const SizedBox(width: 12),
-        const Text(
-          "FoodAdvisor",
-          style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800),
+        Text(
+          config.appName,
+          style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800),
         ),
       ],
     );
@@ -463,6 +504,59 @@ class _SignInCardState extends State<_SignInCard> {
           ),
         ),
       ),
+    );
+  }
+}
+
+class SplashScreen extends StatelessWidget {
+  final AppThemeConfig config;
+
+  const SplashScreen({super.key, required this.config});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: Container(
+        color: config.primary,
+        width: double.infinity,
+        height: double.infinity,
+        child: Center(
+          child: Container(
+            height: 140,
+            width: 140,
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.18),
+              borderRadius: BorderRadius.circular(32),
+            ),
+            padding: const EdgeInsets.all(20),
+            child: _LogoImage(asset: config.logoAsset),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _LogoImage extends StatelessWidget {
+  final String asset;
+
+  const _LogoImage({required this.asset});
+
+  @override
+  Widget build(BuildContext context) {
+    if (asset.toLowerCase().endsWith('.svg')) {
+      return SvgPicture.asset(
+        asset,
+        fit: BoxFit.cover,
+        placeholderBuilder: (_) => const Center(
+          child: Icon(Icons.restaurant_rounded, color: Colors.white),
+        ),
+      );
+    }
+    return Image.asset(
+      asset,
+      fit: BoxFit.cover,
+      errorBuilder: (_, __, ___) => const Icon(Icons.restaurant_rounded, color: Colors.white),
     );
   }
 }

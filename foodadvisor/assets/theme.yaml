@@ -1,0 +1,7 @@
+theme:
+  name: "FoodAdvisor"
+  primary: "#E76F51"
+  secondary: "#2A9D8F"
+  background: "#FFF7F1"
+  surface: "#FFFFFF"
+  logo: "assets/branding/logo.svg"

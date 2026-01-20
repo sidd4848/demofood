@@ -1467,7 +1467,7 @@ class _DayPlanCard extends StatelessWidget {
                 padding: const EdgeInsets.only(bottom: 6),
                 child: Row(
                   children: [
-                    const Icon(Icons.check_circle_rounded, size: 16, color: kSecondary),
+                    Icon(Icons.check_circle_rounded, size: 16, color: kSecondary),
                     const SizedBox(width: 8),
                     Expanded(child: Text(meal)),
                   ],
