@@ -1111,7 +1111,7 @@ class _DietHeader extends StatelessWidget {
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(24),
-        gradient: const LinearGradient(
+        gradient: LinearGradient(
           colors: [kPrimary, kSecondary],
         ),
       ),
