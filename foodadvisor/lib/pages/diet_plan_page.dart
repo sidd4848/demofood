@@ -6,6 +6,7 @@ import '../app.dart';
 import '../models/app_data.dart';
 import '../services/profile_service.dart';
 import '../services/ai_diet_service.dart';
+import '../services/subscription_models.dart';
 import '../services/subscription_service.dart';
 import '../theme.dart';
 import '../widgets/branding.dart';
