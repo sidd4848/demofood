@@ -5,6 +5,7 @@ import 'package:google_sign_in/google_sign_in.dart';
 import '../app.dart';
 import '../models/app_data.dart';
 import '../services/profile_service.dart';
+import '../services/ai_diet_service.dart';
 import '../theme.dart';
 import '../widgets/form_widgets.dart';
 import 'diet_generation_options_page.dart';
@@ -28,6 +29,7 @@ class _DietPlanPageState extends State<DietPlanPage> {
   bool _hasRoutedMissingUserId = false;
   final Map<String, _DayCompletionStatus> _dayStatuses = {};
   final Set<String> _generatedRecipes = {};
+  final AiDietService _aiDietService = const AiDietService();
 
   @override
   void initState() {
@@ -65,6 +67,112 @@ class _DietPlanPageState extends State<DietPlanPage> {
     setState(() {
       _dietPlanFuture = _fetchBundle();
     });
+  }
+
+  Future<void> _handleAiGeneration(String? jobId) async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+    final hadRecent = await _aiDietService.hasRecentRequest(userId: user.uid);
+    String? tweaks;
+    if (!mounted) return;
+    if (hadRecent) {
+      tweaks = await _showAiTweaksDialog();
+      if (!mounted) return;
+      if (tweaks == null) {
+        return;
+      }
+    }
+    try {
+      await _aiDietService.requestPlan(data: widget.data, jobId: jobId, tweaks: tweaks);
+      await saveDietGenerationChoice('ai');
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("AI plan request submitted.")),
+      );
+      _refreshPlan();
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Unable to request AI plan: $error")),
+      );
+    }
+  }
+
+  Future<String?> _showAiTweaksDialog() async {
+    final suggestions = [
+      'Diet too fancy',
+      'Diet too common',
+      'Diet too complex',
+      'Diet too simple',
+    ];
+    final selected = <String>{};
+    final controller = TextEditingController();
+    final result = await showDialog<String?>(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setState) {
+            return AlertDialog(
+              title: const Text('Tweak your next plan'),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('We can refine your plan based on what needs adjusting.'),
+                  const SizedBox(height: 12),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: suggestions.map((label) {
+                      final isSelected = selected.contains(label);
+                      return ChoiceChip(
+                        label: Text(label),
+                        selected: isSelected,
+                        onSelected: (value) {
+                          setState(() {
+                            if (value) {
+                              selected.add(label);
+                            } else {
+                              selected.remove(label);
+                            }
+                          });
+                        },
+                      );
+                    }).toList(),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: controller,
+                    maxLines: 2,
+                    decoration: const InputDecoration(
+                      labelText: 'Add any other tweaks',
+                    ),
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context, ''),
+                  child: const Text('Skip'),
+                ),
+                FilledButton(
+                  onPressed: () {
+                    final combined = [
+                      ...selected,
+                      if (controller.text.trim().isNotEmpty) controller.text.trim(),
+                    ].join(', ');
+                    Navigator.pop(context, combined);
+                  },
+                  child: const Text('Generate'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+    controller.dispose();
+    return result;
   }
 
   void _routeMissingUserId(UserProfileSummary? profile) {
@@ -287,7 +395,7 @@ class _DietPlanPageState extends State<DietPlanPage> {
                   case _PlanMenuAction.upgradePlan:
                     Navigator.push(
                       context,
-                      MaterialPageRoute(builder: (_) => const UpgradePlanPage()),
+                      MaterialPageRoute(builder: (_) => UpgradePlanPage(data: widget.data)),
                     );
                     break;
                   case _PlanMenuAction.about:
@@ -403,6 +511,7 @@ class _DietPlanPageState extends State<DietPlanPage> {
                   data: widget.data,
                   editablePlan: _editablePlan,
                   deficitController: _selfDeficitController,
+                  preferencesBuilder: widget.preferencesBuilder,
                   onUpdate: () => setState(() {}),
                   onUpdateProfile: () {
                     widget.data.reset();
@@ -454,15 +563,11 @@ class _DietPlanPageState extends State<DietPlanPage> {
                   ),
                   const SizedBox(height: 12),
                   _FinalizePlanActions(
-                    onGenerateAi: () async {
-                      await saveDietGenerationChoice('ai');
-                      if (!context.mounted) return;
-                      _refreshPlan();
-                    },
+                    onGenerateAi: () => _handleAiGeneration(jobId),
                     onNutritionist: () {
                       Navigator.push(
                         context,
-                        MaterialPageRoute(builder: (_) => const UpgradePlanPage()),
+                        MaterialPageRoute(builder: (_) => UpgradePlanPage(data: widget.data)),
                       );
                     },
                   ),
@@ -508,13 +613,11 @@ class _DietPlanPageState extends State<DietPlanPage> {
                         plan: plan,
                         status: status,
                         recipesGenerated: recipesGenerated,
-                        onGenerateRecipes: plan.isFuture
-                            ? null
-                            : () {
-                                setState(() {
-                                  _generatedRecipes.add(dateKey);
-                                });
-                              },
+                        onGenerateRecipes: () {
+                          setState(() {
+                            _generatedRecipes.add(dateKey);
+                          });
+                        },
                         onViewRecipes: () {
                           showDialog<void>(
                             context: context,
@@ -866,6 +969,7 @@ class _SelfPlanNextStepPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    const aiService = AiDietService();
     return Scaffold(
       appBar: AppBar(title: const Text("Next step")),
       body: SafeArea(
@@ -883,17 +987,28 @@ class _SelfPlanNextStepPage extends StatelessWidget {
               icon: Icons.auto_awesome_rounded,
               accent: kPrimary,
               onTap: () async {
-                await saveDietGenerationChoice('ai');
-                if (!context.mounted) return;
-                Navigator.pushReplacement(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => DietPlanPage(
-                      data: data,
-                      preferencesBuilder: preferencesBuilder,
+                try {
+                  await aiService.requestPlan(data: data, jobId: null);
+                  await saveDietGenerationChoice('ai');
+                  if (!context.mounted) return;
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text("AI plan request submitted.")),
+                  );
+                  Navigator.pushReplacement(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => DietPlanPage(
+                        data: data,
+                        preferencesBuilder: preferencesBuilder,
+                      ),
                     ),
-                  ),
-                );
+                  );
+                } catch (error) {
+                  if (!context.mounted) return;
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text("Unable to request AI plan: $error")),
+                  );
+                }
               },
             ),
             const SizedBox(height: 16),
@@ -905,7 +1020,7 @@ class _SelfPlanNextStepPage extends StatelessWidget {
               onTap: () {
                 Navigator.push(
                   context,
-                  MaterialPageRoute(builder: (_) => const UpgradePlanPage()),
+                  MaterialPageRoute(builder: (_) => UpgradePlanPage(data: data)),
                 );
               },
             ),
@@ -1135,7 +1250,14 @@ class _PlanContinuationCard extends StatelessWidget {
                 Expanded(
                   child: OutlinedButton(
                     onPressed: onCopy,
-                    child: const Text("Copy for next 7 days"),
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 12),
+                    ),
+                    child: const Text(
+                      "Copy for next 7 days",
+                      textAlign: TextAlign.center,
+                      maxLines: 2,
+                    ),
                   ),
                 ),
                 const SizedBox(width: 12),
@@ -1352,6 +1474,10 @@ class _DayPlanCard extends StatelessWidget {
                 ),
               ),
             ),
+            if (!plan.isFuture && status == _DayCompletionStatus.pending) ...[
+              const SizedBox(height: 6),
+              const _SwipeHint(),
+            ],
             const SizedBox(height: 12),
             Row(
               children: [
@@ -1378,7 +1504,7 @@ class _DayPlanCard extends StatelessWidget {
 
   Color _statusColor(BuildContext context) {
     if (plan.isFuture) {
-      return Colors.grey.shade100;
+      return Theme.of(context).cardColor;
     }
     switch (status) {
       case _DayCompletionStatus.completed:
@@ -1386,8 +1512,60 @@ class _DayPlanCard extends StatelessWidget {
       case _DayCompletionStatus.missed:
         return Colors.red.shade50;
       case _DayCompletionStatus.pending:
-        return Theme.of(context).cardColor;
+        return Colors.grey.shade100;
     }
+  }
+}
+
+class _SwipeHint extends StatefulWidget {
+  const _SwipeHint();
+
+  @override
+  State<_SwipeHint> createState() => _SwipeHintState();
+}
+
+class _SwipeHintState extends State<_SwipeHint> with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+  late final Animation<Offset> _slide;
+  late final Animation<double> _fade;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1200),
+    )..repeat(reverse: true);
+    final curved = CurvedAnimation(parent: _controller, curve: Curves.easeInOut);
+    _slide = Tween<Offset>(begin: const Offset(-0.08, 0), end: const Offset(0.08, 0)).animate(curved);
+    _fade = Tween<double>(begin: 0.45, end: 1).animate(curved);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FadeTransition(
+      opacity: _fade,
+      child: SlideTransition(
+        position: _slide,
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.swipe, size: 18, color: Colors.grey.shade600),
+            const SizedBox(width: 6),
+            Text(
+              "Swipe to mark completed or not completed",
+              style: TextStyle(fontSize: 12, color: Colors.grey.shade600, fontWeight: FontWeight.w600),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }
 

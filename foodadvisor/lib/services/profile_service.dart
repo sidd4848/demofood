@@ -185,6 +185,7 @@ Future<void> saveSelfDietPlan({
   final payload = <String, dynamic>{
     'jobId': jobId,
     'userId': user.uid,
+    'generatedBy': 'self',
     'calorie deficit': calorieDeficit,
     'plan': plan,
     'updatedBy': user.uid,
