@@ -30,6 +30,10 @@ class AppData extends ChangeNotifier {
   // Frequency: item -> {mode: everyday|weekdays|monthly, weekdays:[0..6]}
   final Map<String, Map<String, dynamic>> frequency = {};
 
+  // Locale preferences
+  String? languageCode;
+  String? regionCode;
+
   void reset() {
     name = "";
     gender = "Male";
@@ -44,6 +48,14 @@ class AppData extends ChangeNotifier {
     allergies.clear();
     healthSymptoms.clear();
     frequency.clear();
+    languageCode = null;
+    regionCode = null;
+    notifyListeners();
+  }
+
+  void setLocale({required String language, required String region}) {
+    languageCode = language;
+    regionCode = region;
     notifyListeners();
   }
 
@@ -130,6 +142,10 @@ class AppData extends ChangeNotifier {
           "allergies": allergies.toList(),
           "healthSymptoms": healthSymptoms.toList(),
         },
+        "locale": {
+          "language": languageCode,
+          "region": regionCode,
+        },
         "frequency": frequency,
       };
 
@@ -178,6 +194,10 @@ class AppData extends ChangeNotifier {
     frequency
       ..clear()
       ..addAll(((j["frequency"] ?? {}) as Map).cast<String, Map<String, dynamic>>());
+
+    final locale = (j["locale"] ?? {}) as Map<String, dynamic>;
+    languageCode = locale["language"]?.toString();
+    regionCode = locale["region"]?.toString();
 
     notifyListeners();
   }
