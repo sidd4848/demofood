@@ -22,17 +22,19 @@ class UpgradePlanPage extends StatelessWidget {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Upgrade plan'),
-        leadingWidth: 140,
-        leading: Padding(
-          padding: const EdgeInsets.only(left: 12),
-          child: FutureBuilder<_UpgradePlanData>(
-            future: dataFuture,
-            builder: (context, snapshot) {
-              final label = _planLabel(snapshot.data?.subscription);
-              return PlanBadge(label: label);
-            },
+        leading: const BackButton(),
+        actions: [
+          Padding(
+            padding: const EdgeInsets.only(right: 12),
+            child: FutureBuilder<_UpgradePlanData>(
+              future: dataFuture,
+              builder: (context, snapshot) {
+                final label = _planLabel(snapshot.data?.subscription);
+                return PlanBadge(label: label);
+              },
+            ),
           ),
-        ),
+        ],
       ),
       body: SafeArea(
         child: FutureBuilder<_UpgradePlanData>(
