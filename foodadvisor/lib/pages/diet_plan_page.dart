@@ -5,6 +5,7 @@ import 'package:google_sign_in/google_sign_in.dart';
 import '../app.dart';
 import '../models/app_data.dart';
 import '../services/profile_service.dart';
+import '../services/ai_diet_service.dart';
 import '../theme.dart';
 import '../widgets/form_widgets.dart';
 import 'diet_generation_options_page.dart';
@@ -28,6 +29,7 @@ class _DietPlanPageState extends State<DietPlanPage> {
   bool _hasRoutedMissingUserId = false;
   final Map<String, _DayCompletionStatus> _dayStatuses = {};
   final Set<String> _generatedRecipes = {};
+  final AiDietService _aiDietService = const AiDietService();
 
   @override
   void initState() {
@@ -65,6 +67,112 @@ class _DietPlanPageState extends State<DietPlanPage> {
     setState(() {
       _dietPlanFuture = _fetchBundle();
     });
+  }
+
+  Future<void> _handleAiGeneration(String? jobId) async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+    final hadRecent = await _aiDietService.hasRecentRequest(userId: user.uid);
+    String? tweaks;
+    if (!mounted) return;
+    if (hadRecent) {
+      tweaks = await _showAiTweaksDialog();
+      if (!mounted) return;
+      if (tweaks == null) {
+        return;
+      }
+    }
+    try {
+      await _aiDietService.requestPlan(data: widget.data, jobId: jobId, tweaks: tweaks);
+      await saveDietGenerationChoice('ai');
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("AI plan request submitted.")),
+      );
+      _refreshPlan();
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Unable to request AI plan: $error")),
+      );
+    }
+  }
+
+  Future<String?> _showAiTweaksDialog() async {
+    final suggestions = [
+      'Diet too fancy',
+      'Diet too common',
+      'Diet too complex',
+      'Diet too simple',
+    ];
+    final selected = <String>{};
+    final controller = TextEditingController();
+    final result = await showDialog<String?>(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setState) {
+            return AlertDialog(
+              title: const Text('Tweak your next plan'),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('We can refine your plan based on what needs adjusting.'),
+                  const SizedBox(height: 12),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: suggestions.map((label) {
+                      final isSelected = selected.contains(label);
+                      return ChoiceChip(
+                        label: Text(label),
+                        selected: isSelected,
+                        onSelected: (value) {
+                          setState(() {
+                            if (value) {
+                              selected.add(label);
+                            } else {
+                              selected.remove(label);
+                            }
+                          });
+                        },
+                      );
+                    }).toList(),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: controller,
+                    maxLines: 2,
+                    decoration: const InputDecoration(
+                      labelText: 'Add any other tweaks',
+                    ),
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context, ''),
+                  child: const Text('Skip'),
+                ),
+                FilledButton(
+                  onPressed: () {
+                    final combined = [
+                      ...selected,
+                      if (controller.text.trim().isNotEmpty) controller.text.trim(),
+                    ].join(', ');
+                    Navigator.pop(context, combined);
+                  },
+                  child: const Text('Generate'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+    controller.dispose();
+    return result;
   }
 
   void _routeMissingUserId(UserProfileSummary? profile) {
@@ -287,7 +395,7 @@ class _DietPlanPageState extends State<DietPlanPage> {
                   case _PlanMenuAction.upgradePlan:
                     Navigator.push(
                       context,
-                      MaterialPageRoute(builder: (_) => const UpgradePlanPage()),
+                      MaterialPageRoute(builder: (_) => UpgradePlanPage(data: widget.data)),
                     );
                     break;
                   case _PlanMenuAction.about:
@@ -455,15 +563,11 @@ class _DietPlanPageState extends State<DietPlanPage> {
                   ),
                   const SizedBox(height: 12),
                   _FinalizePlanActions(
-                    onGenerateAi: () async {
-                      await saveDietGenerationChoice('ai');
-                      if (!context.mounted) return;
-                      _refreshPlan();
-                    },
+                    onGenerateAi: () => _handleAiGeneration(jobId),
                     onNutritionist: () {
                       Navigator.push(
                         context,
-                        MaterialPageRoute(builder: (_) => const UpgradePlanPage()),
+                        MaterialPageRoute(builder: (_) => UpgradePlanPage(data: widget.data)),
                       );
                     },
                   ),
@@ -865,6 +969,7 @@ class _SelfPlanNextStepPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    const aiService = AiDietService();
     return Scaffold(
       appBar: AppBar(title: const Text("Next step")),
       body: SafeArea(
@@ -882,17 +987,28 @@ class _SelfPlanNextStepPage extends StatelessWidget {
               icon: Icons.auto_awesome_rounded,
               accent: kPrimary,
               onTap: () async {
-                await saveDietGenerationChoice('ai');
-                if (!context.mounted) return;
-                Navigator.pushReplacement(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => DietPlanPage(
-                      data: data,
-                      preferencesBuilder: preferencesBuilder,
+                try {
+                  await aiService.requestPlan(data: data, jobId: null);
+                  await saveDietGenerationChoice('ai');
+                  if (!context.mounted) return;
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text("AI plan request submitted.")),
+                  );
+                  Navigator.pushReplacement(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => DietPlanPage(
+                        data: data,
+                        preferencesBuilder: preferencesBuilder,
+                      ),
                     ),
-                  ),
-                );
+                  );
+                } catch (error) {
+                  if (!context.mounted) return;
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text("Unable to request AI plan: $error")),
+                  );
+                }
               },
             ),
             const SizedBox(height: 16),
@@ -904,7 +1020,7 @@ class _SelfPlanNextStepPage extends StatelessWidget {
               onTap: () {
                 Navigator.push(
                   context,
-                  MaterialPageRoute(builder: (_) => const UpgradePlanPage()),
+                  MaterialPageRoute(builder: (_) => UpgradePlanPage(data: data)),
                 );
               },
             ),
