@@ -91,7 +91,7 @@ class _DietGenerationOptionsPageState extends State<DietGenerationOptionsPage> {
                           Navigator.pop(context);
                           Navigator.push(
                             context,
-                            MaterialPageRoute(builder: (_) => const UpgradePlanPage()),
+                            MaterialPageRoute(builder: (_) => UpgradePlanPage(data: widget.data)),
                           );
                         },
                         child: const Text("Upgrade plan"),

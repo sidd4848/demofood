@@ -21,5 +21,49 @@ service cloud.firestore {
 
       allow delete: if false;
     }
+
+    match /dietGeneration/{userId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+
+    match /diet/{jobId} {
+      allow create: if request.auth != null && request.resource.data.userId == request.auth.uid;
+      allow read: if request.auth != null && resource.data.userId == request.auth.uid;
+      allow update: if request.auth != null && request.resource.data.userId == request.auth.uid;
+      allow delete: if false;
+    }
+
+    match /prompt/{promptId} {
+      allow read: if request.auth != null;
+      allow write: if false;
+    }
+
+    match /subscriptionConfig/{configId} {
+      allow read: if request.auth != null;
+      allow write: if false;
+    }
+
+    match /subscriptionUpgradeRequests/{requestId} {
+      allow create: if request.auth != null
+        && request.resource.data.userId == request.auth.uid
+        && request.resource.data.status == 'created';
+      allow read: if request.auth != null && resource.data.userId == request.auth.uid;
+      allow update, delete: if false;
+    }
+
+    match /subscriptionRequests/{requestId} {
+      allow read: if request.auth != null && resource.data.userId == request.auth.uid;
+      allow write: if false;
+    }
+
+    match /subscriptionPayments/{reqId} {
+      allow read, write: if false;
+    }
+
+    match /aiDietPlans/{planId} {
+      allow create: if request.auth != null && request.resource.data.userId == request.auth.uid;
+      allow read: if request.auth != null && resource.data.userId == request.auth.uid;
+      allow update, delete: if false;
+    }
   }
 }

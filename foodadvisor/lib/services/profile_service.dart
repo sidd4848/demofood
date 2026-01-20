@@ -47,6 +47,20 @@ class DietGenerationChoice {
   final String generatedBy;
 }
 
+class SubscriptionSummary {
+  const SubscriptionSummary({
+    required this.plan,
+    required this.status,
+    required this.subscriptionId,
+    required this.currentPeriodEnd,
+  });
+
+  final String plan;
+  final String status;
+  final String? subscriptionId;
+  final DateTime? currentPeriodEnd;
+}
+
 Future<void> saveProfileToFirebase(AppData data) async {
   final user = FirebaseAuth.instance.currentUser;
   if (user == null) {
@@ -96,6 +110,25 @@ Future<DietGenerationChoice?> fetchDietGenerationChoice() async {
   final generatedBy = data['generatedBy'] as String?;
   if (generatedBy == null || generatedBy.isEmpty) return null;
   return DietGenerationChoice(userId: user.uid, generatedBy: generatedBy);
+}
+
+Future<SubscriptionSummary?> fetchUserSubscription() async {
+  final user = FirebaseAuth.instance.currentUser;
+  if (user == null) return null;
+  final snapshot = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
+  if (!snapshot.exists) return null;
+  final data = snapshot.data();
+  if (data == null) return null;
+  final plan = data['plan']?.toString() ?? 'free';
+  final status = data['subscriptionStatus']?.toString() ?? 'trial';
+  final subscriptionId = data['subscriptionId']?.toString();
+  final currentPeriodEnd = _parseFirestoreTimestamp(data['currentPeriodEnd']);
+  return SubscriptionSummary(
+    plan: plan,
+    status: status,
+    subscriptionId: subscriptionId,
+    currentPeriodEnd: currentPeriodEnd,
+  );
 }
 
 Future<DietPlanData?> fetchDietPlan() async {
@@ -185,6 +218,7 @@ Future<void> saveSelfDietPlan({
   final payload = <String, dynamic>{
     'jobId': jobId,
     'userId': user.uid,
+    'generatedBy': 'self',
     'calorie deficit': calorieDeficit,
     'plan': plan,
     'updatedBy': user.uid,
