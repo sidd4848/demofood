@@ -60,5 +60,3 @@ class SubscriptionService {
     }
   }
 }
-
-export 'subscription_models.dart';
