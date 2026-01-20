@@ -1,5 +1,8 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 
 import 'models/app_data.dart';
@@ -8,6 +11,7 @@ import 'pages/diet_plan_page.dart';
 import 'pages/user_details_page.dart';
 import 'services/profile_service.dart';
 import 'theme.dart';
+import 'theme_config.dart';
 import 'widgets/form_widgets.dart';
 
 class FoodAdvisorApp extends StatefulWidget {
@@ -18,20 +22,53 @@ class FoodAdvisorApp extends StatefulWidget {
 
 class _FoodAdvisorAppState extends State<FoodAdvisorApp> {
   final AppData data = AppData();
+  late Future<AppThemeConfig> _themeFuture;
+  Timer? _splashTimer;
+  bool _showSplash = true;
 
   @override
   void initState() {
     super.initState();
+    _themeFuture = AppThemeConfig.loadFromAsset('assets/theme.yaml');
+    _splashTimer = Timer(const Duration(milliseconds: 1600), () {
+      if (mounted) {
+        setState(() => _showSplash = false);
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _splashTimer?.cancel();
+    super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     return AnimatedBuilder(
       animation: data,
-      builder: (context, _) => MaterialApp(
-        debugShowCheckedModeBanner: false,
-        theme: buildTheme(),
-        home: LandingPage(data: data),
+      builder: (context, _) => FutureBuilder<AppThemeConfig>(
+        future: _themeFuture,
+        builder: (context, snapshot) {
+          final config = snapshot.data ?? AppThemeConfig.fallback();
+          AppThemeConfig.apply(config);
+          return MaterialApp(
+            debugShowCheckedModeBanner: false,
+            theme: buildTheme(config),
+            home: AnimatedSwitcher(
+              duration: const Duration(milliseconds: 400),
+              child: _showSplash
+                  ? SplashScreen(
+                      key: const ValueKey('splash'),
+                      config: config,
+                    )
+                  : LandingPage(
+                      key: const ValueKey('landing'),
+                      data: data,
+                    ),
+            ),
+          );
+        },
       ),
     );
   }
@@ -78,6 +115,7 @@ class LandingPage extends StatelessWidget {
 class _PremiumHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
+    final config = AppThemeConfig.current;
     return Row(
       children: [
         Container(
@@ -85,16 +123,19 @@ class _PremiumHeader extends StatelessWidget {
           width: 44,
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(14),
-            gradient: const LinearGradient(
+            gradient: LinearGradient(
               colors: [kPrimary, kSecondary],
             ),
           ),
-          child: const Icon(Icons.restaurant_rounded, color: Colors.white),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(12),
+            child: _LogoImage(asset: config.logoAsset),
+          ),
         ),
         const SizedBox(width: 12),
-        const Text(
-          "FoodAdvisor",
-          style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800),
+        Text(
+          config.appName,
+          style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800),
         ),
       ],
     );
@@ -115,6 +156,26 @@ class _SignInCardState extends State<_SignInCard> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   bool _isLoading = false;
+  String? _selectedLanguage;
+  String? _selectedRegion;
+
+  static const _languages = [
+    {'code': 'en', 'label': 'English'},
+    {'code': 'hi', 'label': 'Hindi'},
+    {'code': 'ta', 'label': 'Tamil'},
+    {'code': 'te', 'label': 'Telugu'},
+    {'code': 'kn', 'label': 'Kannada'},
+    {'code': 'ml', 'label': 'Malayalam'},
+  ];
+
+  static const _regions = [
+    {'code': 'IN', 'label': 'India'},
+    {'code': 'US', 'label': 'United States'},
+    {'code': 'GB', 'label': 'United Kingdom'},
+    {'code': 'AE', 'label': 'UAE'},
+    {'code': 'SG', 'label': 'Singapore'},
+    {'code': 'AU', 'label': 'Australia'},
+  ];
 
   bool get _canSubmit {
     return _emailController.text.trim().isNotEmpty &&
@@ -127,6 +188,19 @@ class _SignInCardState extends State<_SignInCard> {
     _emailController.dispose();
     _passwordController.dispose();
     super.dispose();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_selectedLanguage != null && _selectedRegion != null) return;
+    final locale = Localizations.localeOf(context);
+    _selectedLanguage ??= widget.data.languageCode ?? locale.languageCode;
+    _selectedRegion ??= widget.data.regionCode ?? locale.countryCode ?? 'IN';
+    widget.data.setLocale(
+      language: _selectedLanguage ?? 'en',
+      region: _selectedRegion ?? 'IN',
+    );
   }
 
   void _showMessage(String message) {
@@ -303,6 +377,62 @@ class _SignInCardState extends State<_SignInCard> {
                 style: TextStyle(color: Colors.grey.shade700, height: 1.4),
               ),
               const SizedBox(height: 16),
+              Row(
+                children: [
+                  Expanded(
+                    child: DropdownButtonFormField<String>(
+                      value: _selectedLanguage,
+                      decoration: const InputDecoration(
+                        labelText: "Language",
+                        prefixIcon: Icon(Icons.language_outlined),
+                      ),
+                      items: _languages
+                          .map(
+                            (entry) => DropdownMenuItem(
+                              value: entry['code'],
+                              child: Text(entry['label'] ?? ''),
+                            ),
+                          )
+                          .toList(),
+                      onChanged: (value) {
+                        if (value == null) return;
+                        setState(() => _selectedLanguage = value);
+                        widget.data.setLocale(
+                          language: value,
+                          region: _selectedRegion ?? 'IN',
+                        );
+                      },
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: DropdownButtonFormField<String>(
+                      value: _selectedRegion,
+                      decoration: const InputDecoration(
+                        labelText: "Region",
+                        prefixIcon: Icon(Icons.public_outlined),
+                      ),
+                      items: _regions
+                          .map(
+                            (entry) => DropdownMenuItem(
+                              value: entry['code'],
+                              child: Text(entry['label'] ?? ''),
+                            ),
+                          )
+                          .toList(),
+                      onChanged: (value) {
+                        if (value == null) return;
+                        setState(() => _selectedRegion = value);
+                        widget.data.setLocale(
+                          language: _selectedLanguage ?? 'en',
+                          region: value,
+                        );
+                      },
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
               TextFormField(
                 controller: _emailController,
                 keyboardType: TextInputType.emailAddress,
@@ -374,6 +504,59 @@ class _SignInCardState extends State<_SignInCard> {
           ),
         ),
       ),
+    );
+  }
+}
+
+class SplashScreen extends StatelessWidget {
+  final AppThemeConfig config;
+
+  const SplashScreen({super.key, required this.config});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: Container(
+        color: config.primary,
+        width: double.infinity,
+        height: double.infinity,
+        child: Center(
+          child: Container(
+            height: 140,
+            width: 140,
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.18),
+              borderRadius: BorderRadius.circular(32),
+            ),
+            padding: const EdgeInsets.all(20),
+            child: _LogoImage(asset: config.logoAsset),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _LogoImage extends StatelessWidget {
+  final String asset;
+
+  const _LogoImage({required this.asset});
+
+  @override
+  Widget build(BuildContext context) {
+    if (asset.toLowerCase().endsWith('.svg')) {
+      return SvgPicture.asset(
+        asset,
+        fit: BoxFit.cover,
+        placeholderBuilder: (_) => const Center(
+          child: Icon(Icons.restaurant_rounded, color: Colors.white),
+        ),
+      );
+    }
+    return Image.asset(
+      asset,
+      fit: BoxFit.cover,
+      errorBuilder: (_, __, ___) => const Icon(Icons.restaurant_rounded, color: Colors.white),
     );
   }
 }
