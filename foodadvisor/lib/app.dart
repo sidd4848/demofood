@@ -12,6 +12,7 @@ import 'pages/user_details_page.dart';
 import 'services/profile_service.dart';
 import 'theme.dart';
 import 'theme_config.dart';
+import 'widgets/branding.dart';
 import 'widgets/form_widgets.dart';
 
 class FoodAdvisorApp extends StatefulWidget {
@@ -129,7 +130,7 @@ class _PremiumHeader extends StatelessWidget {
           ),
           child: ClipRRect(
             borderRadius: BorderRadius.circular(12),
-            child: _LogoImage(asset: config.logoAsset),
+            child: BrandLogo(asset: config.logoAsset, size: 44),
           ),
         ),
         const SizedBox(width: 12),
@@ -529,7 +530,7 @@ class SplashScreen extends StatelessWidget {
               borderRadius: BorderRadius.circular(32),
             ),
             padding: const EdgeInsets.all(20),
-            child: _LogoImage(asset: config.logoAsset),
+            child: BrandLogo(asset: config.logoAsset, size: 80, fit: BoxFit.contain),
           ),
         ),
       ),
@@ -537,29 +538,6 @@ class SplashScreen extends StatelessWidget {
   }
 }
 
-class _LogoImage extends StatelessWidget {
-  final String asset;
-
-  const _LogoImage({required this.asset});
-
-  @override
-  Widget build(BuildContext context) {
-    if (asset.toLowerCase().endsWith('.svg')) {
-      return SvgPicture.asset(
-        asset,
-        fit: BoxFit.cover,
-        placeholderBuilder: (_) => const Center(
-          child: Icon(Icons.restaurant_rounded, color: Colors.white),
-        ),
-      );
-    }
-    return Image.asset(
-      asset,
-      fit: BoxFit.cover,
-      errorBuilder: (_, __, ___) => const Icon(Icons.restaurant_rounded, color: Colors.white),
-    );
-  }
-}
 
 /// -------------------------------
 /// Step 2: Preferences

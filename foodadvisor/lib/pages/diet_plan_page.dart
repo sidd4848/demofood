@@ -6,7 +6,9 @@ import '../app.dart';
 import '../models/app_data.dart';
 import '../services/profile_service.dart';
 import '../services/ai_diet_service.dart';
+import '../services/subscription_service.dart';
 import '../theme.dart';
+import '../widgets/branding.dart';
 import '../widgets/form_widgets.dart';
 import 'diet_generation_options_page.dart';
 import 'upgrade_plan_page.dart';
@@ -30,6 +32,7 @@ class _DietPlanPageState extends State<DietPlanPage> {
   final Map<String, _DayCompletionStatus> _dayStatuses = {};
   final Set<String> _generatedRecipes = {};
   final AiDietService _aiDietService = const AiDietService();
+  final SubscriptionService _subscriptionService = const SubscriptionService();
 
   @override
   void initState() {
@@ -49,17 +52,25 @@ class _DietPlanPageState extends State<DietPlanPage> {
       fetchUserProfileSummary(),
       fetchDietGenerationChoice(),
       fetchProfileJobId(),
+      fetchUserSubscription(),
     ]);
     final plan = results[0] as DietPlanData?;
     if (plan != null) {
       _cachedPlan = plan;
     }
     final resolvedPlan = plan ?? _cachedPlan;
+    final user = FirebaseAuth.instance.currentUser;
+    SubscriptionUpgradeRequestSummary? upgradeRequest;
+    if (user != null) {
+      upgradeRequest = await _subscriptionService.fetchLatestUpgradeRequest(userId: user.uid);
+    }
     return _DietPlanBundle(
       plan: resolvedPlan,
       profile: results[1] as UserProfileSummary?,
       choice: results[2] as DietGenerationChoice?,
       jobId: results[3] as String?,
+      subscription: results[4] as SubscriptionSummary?,
+      upgradeRequest: upgradeRequest,
     );
   }
 
@@ -361,6 +372,17 @@ class _DietPlanPageState extends State<DietPlanPage> {
     return 'Mon';
   }
 
+  String _planLabel(SubscriptionSummary? subscription) {
+    if (subscription == null) return 'Free';
+    final plan = subscription.plan.toLowerCase();
+    if (plan == 'free' && subscription.status.toLowerCase() == 'trial') {
+      return 'Trial';
+    }
+    if (plan == 'elite') return 'Elite';
+    if (plan == 'pro') return 'Pro';
+    return 'Free';
+  }
+
   @override
   Widget build(BuildContext context) {
     final user = FirebaseAuth.instance.currentUser;
@@ -369,6 +391,25 @@ class _DietPlanPageState extends State<DietPlanPage> {
       onWillPop: () async => false,
       child: Scaffold(
         appBar: AppBar(
+          leadingWidth: 140,
+          leading: Padding(
+            padding: const EdgeInsets.only(left: 12),
+            child: FutureBuilder<_DietPlanBundle>(
+              future: _dietPlanFuture,
+              builder: (context, snapshot) {
+                final label = _planLabel(snapshot.data?.subscription);
+                return PlanBadge(
+                  label: label,
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => UpgradePlanPage(data: widget.data)),
+                    );
+                  },
+                );
+              },
+            ),
+          ),
           title: const Text("Diet details"),
           automaticallyImplyLeading: false,
           actions: [
@@ -562,6 +603,13 @@ class _DietPlanPageState extends State<DietPlanPage> {
                     note: "Your next 7 days are planned for balanced energy and steady calorie deficit.",
                   ),
                   const SizedBox(height: 12),
+                  if (snapshot.data?.subscription != null)
+                    _SubscriptionStatusBanner(
+                      subscription: snapshot.data!.subscription!,
+                      upgradeRequest: snapshot.data!.upgradeRequest,
+                      onReload: _refreshPlan,
+                    ),
+                  if (snapshot.data?.subscription != null) const SizedBox(height: 12),
                   _FinalizePlanActions(
                     onGenerateAi: () => _handleAiGeneration(jobId),
                     onNutritionist: () {
@@ -697,12 +745,16 @@ class _DietPlanBundle {
   final UserProfileSummary? profile;
   final DietGenerationChoice? choice;
   final String? jobId;
+  final SubscriptionSummary? subscription;
+  final SubscriptionUpgradeRequestSummary? upgradeRequest;
 
   const _DietPlanBundle({
     required this.plan,
     required this.profile,
     required this.choice,
     required this.jobId,
+    required this.subscription,
+    required this.upgradeRequest,
   });
 }
 
@@ -742,6 +794,96 @@ class _DietLoadingState extends StatelessWidget {
       ],
     );
   }
+}
+
+class _SubscriptionStatusBanner extends StatelessWidget {
+  final SubscriptionSummary subscription;
+  final SubscriptionUpgradeRequestSummary? upgradeRequest;
+  final VoidCallback onReload;
+
+  const _SubscriptionStatusBanner({
+    required this.subscription,
+    required this.upgradeRequest,
+    required this.onReload,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final banner = _buildBanner();
+    if (banner == null) {
+      return const SizedBox.shrink();
+    }
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: banner.color.withOpacity(0.12),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: banner.color.withOpacity(0.3)),
+      ),
+      child: Row(
+        children: [
+          Icon(banner.icon, color: banner.color),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              banner.message,
+              style: TextStyle(color: banner.color, fontWeight: FontWeight.w600),
+            ),
+          ),
+          TextButton(
+            onPressed: onReload,
+            child: const Text("Reload"),
+          ),
+        ],
+      ),
+    );
+  }
+
+  _BannerState? _buildBanner() {
+    final plan = subscription.plan.toLowerCase();
+    if (plan != 'free') return null;
+    final status = upgradeRequest?.status.toLowerCase();
+    switch (status) {
+      case 'payment_started':
+        return const _BannerState(
+          message: 'Payment processing…',
+          icon: Icons.hourglass_top_rounded,
+          color: Colors.orange,
+        );
+      case 'paid':
+        return const _BannerState(
+          message: 'Payment received. Activating subscription…',
+          icon: Icons.check_circle_outline,
+          color: Colors.green,
+        );
+      case 'failed':
+        return const _BannerState(
+          message: 'Payment failed. Try again.',
+          icon: Icons.error_outline,
+          color: Colors.redAccent,
+        );
+      case 'created':
+        return const _BannerState(
+          message: 'Payment pending. Complete your payment to activate.',
+          icon: Icons.pending_actions,
+          color: Colors.blueGrey,
+        );
+      default:
+        return null;
+    }
+  }
+}
+
+class _BannerState {
+  final String message;
+  final IconData icon;
+  final Color color;
+
+  const _BannerState({
+    required this.message,
+    required this.icon,
+    required this.color,
+  });
 }
 
 class _SelfPlanEditor extends StatefulWidget {

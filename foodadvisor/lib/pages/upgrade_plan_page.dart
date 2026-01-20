@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 
 import '../models/app_data.dart';
+import '../services/profile_service.dart';
 import '../services/subscription_service.dart';
 import '../theme.dart';
+import '../widgets/branding.dart';
 
 class UpgradePlanPage extends StatelessWidget {
   final AppData data;
@@ -14,22 +16,41 @@ class UpgradePlanPage extends StatelessWidget {
     final messenger = ScaffoldMessenger.of(context);
     final service = const SubscriptionService();
     final locale = Localizations.localeOf(context);
+    final dataFuture = _loadData(service);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Upgrade plan')),
+      appBar: AppBar(
+        title: const Text('Upgrade plan'),
+        leadingWidth: 140,
+        leading: Padding(
+          padding: const EdgeInsets.only(left: 12),
+          child: FutureBuilder<_UpgradePlanData>(
+            future: dataFuture,
+            builder: (context, snapshot) {
+              final label = _planLabel(snapshot.data?.subscription);
+              return PlanBadge(label: label);
+            },
+          ),
+        ),
+      ),
       body: SafeArea(
-        child: FutureBuilder<SubscriptionConfig>(
-          future: service.fetchConfig(),
+        child: FutureBuilder<_UpgradePlanData>(
+          future: dataFuture,
           builder: (context, snapshot) {
             if (snapshot.connectionState == ConnectionState.waiting) {
               return const Center(child: CircularProgressIndicator());
             }
-            final config = snapshot.data;
-            if (config == null) {
+            final dataBundle = snapshot.data;
+            if (dataBundle == null) {
               return const Center(child: Text('Unable to load pricing.'));
             }
+            final config = dataBundle.config;
+            final subscription = dataBundle.subscription;
             final regionCode = data.regionCode ?? locale.countryCode ?? 'IN';
             final regionPricing = config.resolveRegion(regionCode);
+            final activePlan = subscription?.plan.toLowerCase() ?? 'free';
+            final isProOrElite = activePlan == 'pro' || activePlan == 'elite';
+            final daysRemaining = _daysRemaining(subscription?.currentPeriodEnd);
             return ListView(
               padding: const EdgeInsets.all(20),
               children: [
@@ -43,9 +64,10 @@ class UpgradePlanPage extends StatelessWidget {
                     '10 days trial of Elite features',
                     'No card required for trial',
                   ],
-                  buttonLabel: 'Current plan',
+                  buttonLabel: isProOrElite ? 'Free trial' : 'Current plan',
                   buttonEnabled: false,
                   accent: Colors.grey,
+                  compact: isProOrElite,
                 ),
                 const SizedBox(height: 16),
                 _PlanCard(
@@ -57,26 +79,41 @@ class UpgradePlanPage extends StatelessWidget {
                     'WhatsApp message scheduling',
                     'Voice notes for 30 days',
                   ],
-                  buttonLabel: 'Upgrade to Pro',
+                  buttonLabel: activePlan == 'pro' ? 'Current plan' : 'Upgrade to Pro',
+                  buttonEnabled: activePlan != 'pro',
                   accent: kPrimary,
                   highlight: true,
-                  onTap: () async {
-                    final selection = await _showDurationPicker(
-                      context,
-                      config: config,
-                      regionPricing: regionPricing,
-                      planId: 'pro',
-                    );
-                    if (selection == null) return;
-                    await service.requestSubscriptionUpgrade(
-                      planId: 'pro',
-                      duration: selection.duration,
-                      price: selection.price,
-                    );
-                    messenger.showSnackBar(
-                      const SnackBar(content: Text('Upgrade request saved.')),
-                    );
-                  },
+                  footerText: activePlan == 'pro' && daysRemaining != null
+                      ? '$daysRemaining days remaining'
+                      : null,
+                  extraAction: _buildExtendAction(
+                    context,
+                    service: service,
+                    config: config,
+                    regionPricing: regionPricing,
+                    planId: 'pro',
+                    daysRemaining: daysRemaining,
+                    messenger: messenger,
+                  ),
+                  onTap: activePlan == 'pro'
+                      ? null
+                      : () async {
+                          final selection = await _showDurationPicker(
+                            context,
+                            config: config,
+                            regionPricing: regionPricing,
+                            planId: 'pro',
+                          );
+                          if (selection == null) return;
+                          await service.requestSubscriptionUpgrade(
+                            planId: 'pro',
+                            duration: selection.duration,
+                            price: selection.price,
+                          );
+                          messenger.showSnackBar(
+                            const SnackBar(content: Text('Upgrade request saved.')),
+                          );
+                        },
                 ),
                 const SizedBox(height: 16),
                 _PlanCard(
@@ -88,25 +125,40 @@ class UpgradePlanPage extends StatelessWidget {
                     'Unlimited recipe generation',
                     'Priority nutritionist support',
                   ],
-                  buttonLabel: 'Upgrade to Elite',
+                  buttonLabel: activePlan == 'elite' ? 'Current plan' : 'Upgrade to Elite',
+                  buttonEnabled: activePlan != 'elite',
                   accent: kSecondary,
-                  onTap: () async {
-                    final selection = await _showDurationPicker(
-                      context,
-                      config: config,
-                      regionPricing: regionPricing,
-                      planId: 'elite',
-                    );
-                    if (selection == null) return;
-                    await service.requestSubscriptionUpgrade(
-                      planId: 'elite',
-                      duration: selection.duration,
-                      price: selection.price,
-                    );
-                    messenger.showSnackBar(
-                      const SnackBar(content: Text('Upgrade request saved.')),
-                    );
-                  },
+                  footerText: activePlan == 'elite' && daysRemaining != null
+                      ? '$daysRemaining days remaining'
+                      : null,
+                  extraAction: _buildExtendAction(
+                    context,
+                    service: service,
+                    config: config,
+                    regionPricing: regionPricing,
+                    planId: 'elite',
+                    daysRemaining: daysRemaining,
+                    messenger: messenger,
+                  ),
+                  onTap: activePlan == 'elite'
+                      ? null
+                      : () async {
+                          final selection = await _showDurationPicker(
+                            context,
+                            config: config,
+                            regionPricing: regionPricing,
+                            planId: 'elite',
+                          );
+                          if (selection == null) return;
+                          await service.requestSubscriptionUpgrade(
+                            planId: 'elite',
+                            duration: selection.duration,
+                            price: selection.price,
+                          );
+                          messenger.showSnackBar(
+                            const SnackBar(content: Text('Upgrade request saved.')),
+                          );
+                        },
                 ),
               ],
             );
@@ -224,6 +276,73 @@ class UpgradePlanPage extends StatelessWidget {
       },
     );
   }
+
+  Future<_UpgradePlanData> _loadData(SubscriptionService service) async {
+    final results = await Future.wait([
+      service.fetchConfig(),
+      fetchUserSubscription(),
+    ]);
+    return _UpgradePlanData(
+      config: results[0] as SubscriptionConfig,
+      subscription: results[1] as SubscriptionSummary?,
+    );
+  }
+
+  String _planLabel(SubscriptionSummary? summary) {
+    if (summary == null) return 'Free';
+    final plan = summary.plan.toLowerCase();
+    if (plan == 'free' && summary.status.toLowerCase() == 'trial') {
+      return 'Trial';
+    }
+    if (plan == 'elite') return 'Elite';
+    if (plan == 'pro') return 'Pro';
+    return 'Free';
+  }
+
+  int? _daysRemaining(DateTime? currentPeriodEnd) {
+    if (currentPeriodEnd == null) return null;
+    final now = DateTime.now();
+    final diff = currentPeriodEnd.difference(now).inDays;
+    return diff >= 0 ? diff : 0;
+  }
+
+  Widget? _buildExtendAction(
+    BuildContext context, {
+    required SubscriptionService service,
+    required SubscriptionConfig config,
+    required RegionPricing regionPricing,
+    required String planId,
+    required int? daysRemaining,
+    required ScaffoldMessengerState messenger,
+  }) {
+    if (daysRemaining == null || daysRemaining >= 90) return null;
+    final yearly = config.durations['yearly'];
+    if (yearly == null) return null;
+    return TextButton(
+      onPressed: () async {
+        final total = regionPricing.priceForPlan(planId) * yearly.months;
+        final discount = (total * yearly.discountPct / 100).round();
+        final finalPrice = total - discount;
+        final price = SubscriptionPrice(
+          region: regionPricing.region,
+          currency: regionPricing.currency,
+          symbol: regionPricing.symbol,
+          basePrice: total,
+          discountPct: yearly.discountPct,
+          finalPrice: finalPrice,
+        );
+        await service.requestSubscriptionUpgrade(
+          planId: planId,
+          duration: yearly,
+          price: price,
+        );
+        messenger.showSnackBar(
+          const SnackBar(content: Text('Yearly extension requested.')),
+        );
+      },
+      child: const Text('Extend to yearly'),
+    );
+  }
 }
 
 class _PlanCard extends StatelessWidget {
@@ -237,6 +356,9 @@ class _PlanCard extends StatelessWidget {
     this.onTap,
     this.buttonEnabled = true,
     this.highlight = false,
+    this.compact = false,
+    this.footerText,
+    this.extraAction,
   });
 
   final String title;
@@ -248,9 +370,23 @@ class _PlanCard extends StatelessWidget {
   final VoidCallback? onTap;
   final bool buttonEnabled;
   final bool highlight;
+  final bool compact;
+  final String? footerText;
+  final Widget? extraAction;
 
   @override
   Widget build(BuildContext context) {
+    if (compact) {
+      return Card(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        child: ListTile(
+          leading: Icon(Icons.lock_outline, color: accent),
+          title: Text(title, style: const TextStyle(fontWeight: FontWeight.w700)),
+          subtitle: Text(badge),
+          trailing: Text(priceLabel, style: TextStyle(color: accent, fontWeight: FontWeight.w700)),
+        ),
+      );
+    }
     return Card(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
       elevation: highlight ? 8 : 2,
@@ -325,6 +461,14 @@ class _PlanCard extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 14),
+            if (footerText != null)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Text(
+                  footerText!,
+                  style: TextStyle(color: Colors.grey.shade700, fontWeight: FontWeight.w600),
+                ),
+              ),
             SizedBox(
               width: double.infinity,
               child: FilledButton(
@@ -337,6 +481,13 @@ class _PlanCard extends StatelessWidget {
                 child: Text(buttonLabel),
               ),
             ),
+            if (extraAction != null) ...[
+              const SizedBox(height: 8),
+              Align(
+                alignment: Alignment.centerRight,
+                child: extraAction!,
+              ),
+            ],
           ],
         ),
       ),
@@ -349,6 +500,13 @@ class _DurationSelection {
   final SubscriptionPrice price;
 
   const _DurationSelection({required this.duration, required this.price});
+}
+
+class _UpgradePlanData {
+  final SubscriptionConfig config;
+  final SubscriptionSummary? subscription;
+
+  const _UpgradePlanData({required this.config, required this.subscription});
 }
 
 class _UpgradeHero extends StatelessWidget {

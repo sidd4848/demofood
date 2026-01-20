@@ -32,8 +32,30 @@ class SubscriptionService {
       'basePrice': price.basePrice,
       'discountPct': price.discountPct,
       'finalPrice': price.finalPrice,
+      'status': 'created',
       'createdAt': FieldValue.serverTimestamp(),
     });
+  }
+
+  Future<SubscriptionUpgradeRequestSummary?> fetchLatestUpgradeRequest({required String userId}) async {
+    try {
+      final snapshot = await FirebaseFirestore.instance
+          .collection(upgradeRequestCollection)
+          .where('userId', isEqualTo: userId)
+          .orderBy('createdAt', descending: true)
+          .limit(1)
+          .get();
+      if (snapshot.docs.isEmpty) return null;
+      return SubscriptionUpgradeRequestSummary.fromJson(snapshot.docs.first.data());
+    } on FirebaseException {
+      final snapshot = await FirebaseFirestore.instance
+          .collection(upgradeRequestCollection)
+          .where('userId', isEqualTo: userId)
+          .limit(1)
+          .get();
+      if (snapshot.docs.isEmpty) return null;
+      return SubscriptionUpgradeRequestSummary.fromJson(snapshot.docs.first.data());
+    }
   }
 }
 
@@ -76,6 +98,107 @@ class SubscriptionConfig {
       return regions[regionCode]!;
     }
     return regions['default'] ?? regions.values.first;
+  }
+
+  List<SubscriptionDuration> sortedDurations() {
+    final list = durations.values.toList();
+    list.sort((a, b) => a.months.compareTo(b.months));
+    return list;
+  }
+}
+
+class RegionPricing {
+  final String region;
+  final String currency;
+  final String symbol;
+  final Map<String, int> planPrices;
+
+  const RegionPricing({
+    required this.region,
+    required this.currency,
+    required this.symbol,
+    required this.planPrices,
+  });
+
+  factory RegionPricing.fromJson(String region, Map<String, dynamic> json) {
+    final planPrices = <String, int>{};
+    final prices = json['planPrices'];
+    if (prices is Map<String, dynamic>) {
+      for (final entry in prices.entries) {
+        final value = entry.value;
+        if (value is num) {
+          planPrices[entry.key] = value.toInt();
+        }
+      }
+    }
+    return RegionPricing(
+      region: region,
+      currency: json['currency']?.toString() ?? 'INR',
+      symbol: json['symbol']?.toString() ?? '₹',
+      planPrices: planPrices,
+    );
+  }
+
+  int priceForPlan(String planId) => planPrices[planId] ?? 0;
+}
+
+class SubscriptionDuration {
+  final String id;
+  final String label;
+  final int months;
+  final int discountPct;
+
+  const SubscriptionDuration({
+    required this.id,
+    required this.label,
+    required this.months,
+    required this.discountPct,
+  });
+
+  factory SubscriptionDuration.fromJson(String id, Map<String, dynamic> json) {
+    return SubscriptionDuration(
+      id: id,
+      label: json['label']?.toString() ?? id,
+      months: (json['months'] as num?)?.toInt() ?? 1,
+      discountPct: (json['discountPct'] as num?)?.toInt() ?? 0,
+    );
+  }
+}
+
+class SubscriptionPrice {
+  final String region;
+  final String currency;
+  final String symbol;
+  final int basePrice;
+  final int discountPct;
+  final int finalPrice;
+
+  const SubscriptionPrice({
+    required this.region,
+    required this.currency,
+    required this.symbol,
+    required this.basePrice,
+    required this.discountPct,
+    required this.finalPrice,
+  });
+}
+
+class SubscriptionUpgradeRequestSummary {
+  final String status;
+  final DateTime? createdAt;
+
+  const SubscriptionUpgradeRequestSummary({required this.status, required this.createdAt});
+
+  factory SubscriptionUpgradeRequestSummary.fromJson(Map<String, dynamic> json) {
+    final createdAtRaw = json['createdAt'];
+    DateTime? createdAt;
+    if (createdAtRaw is Timestamp) {
+      createdAt = createdAtRaw.toDate();
+    }
+    return SubscriptionUpgradeRequestSummary(
+      status: json['status']?.toString() ?? 'created',
+      createdAt: createdAt,
+    );
   }
 
   List<SubscriptionDuration> sortedDurations() {
