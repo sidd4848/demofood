@@ -88,22 +88,22 @@ class LandingPage extends StatelessWidget {
     return Scaffold(
       body: SafeArea(
         child: SingleChildScrollView(
-          padding: const EdgeInsets.all(20),
+          padding: const EdgeInsets.fromLTRB(20, 24, 20, 24),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               _PremiumHeader(),
-              const SizedBox(height: 24),
+              const SizedBox(height: 28),
               const Text(
-                "“Let food be the gentle medicine you choose every day.”",
-                style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700, height: 1.4),
+                "Welcome back",
+                style: TextStyle(fontSize: 26, fontWeight: FontWeight.w800, height: 1.2),
               ),
-              const SizedBox(height: 8),
+              const SizedBox(height: 10),
               Text(
                 "Sign in to keep your nutrition plan, favorites, and wellness goals synced across devices.",
-                style: TextStyle(color: Colors.grey.shade700, height: 1.4),
+                style: TextStyle(color: Colors.grey.shade700, height: 1.5),
               ),
-              const SizedBox(height: 24),
+              const SizedBox(height: 28),
               _SignInCard(data: data),
             ],
           ),
@@ -134,9 +134,18 @@ class _PremiumHeader extends StatelessWidget {
           ),
         ),
         const SizedBox(width: 12),
-        Text(
-          config.appName,
-          style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800),
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              config.appName,
+              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800),
+            ),
+            Text(
+              "Personalized nutrition plans",
+              style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
+            ),
+          ],
         ),
       ],
     );
@@ -360,16 +369,18 @@ class _SignInCardState extends State<_SignInCard> {
   @override
   Widget build(BuildContext context) {
     return Card(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
+      elevation: 2,
+      shadowColor: Colors.black.withOpacity(0.08),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(26)),
       child: Padding(
-        padding: const EdgeInsets.all(18),
+        padding: const EdgeInsets.all(22),
         child: Form(
           key: _formKey,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const Text(
-                "Welcome back",
+                "Sign in",
                 style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800),
               ),
               const SizedBox(height: 8),
@@ -378,58 +389,54 @@ class _SignInCardState extends State<_SignInCard> {
                 style: TextStyle(color: Colors.grey.shade700, height: 1.4),
               ),
               const SizedBox(height: 16),
-              Row(
+              Column(
                 children: [
-                  Expanded(
-                    child: DropdownButtonFormField<String>(
-                      value: _selectedLanguage,
-                      decoration: const InputDecoration(
-                        labelText: "Language",
-                        prefixIcon: Icon(Icons.language_outlined),
-                      ),
-                      items: _languages
-                          .map(
-                            (entry) => DropdownMenuItem(
-                              value: entry['code'],
-                              child: Text(entry['label'] ?? ''),
-                            ),
-                          )
-                          .toList(),
-                      onChanged: (value) {
-                        if (value == null) return;
-                        setState(() => _selectedLanguage = value);
-                        widget.data.setLocale(
-                          language: value,
-                          region: _selectedRegion ?? 'IN',
-                        );
-                      },
+                  DropdownButtonFormField<String>(
+                    value: _selectedLanguage,
+                    decoration: const InputDecoration(
+                      labelText: "Language",
+                      prefixIcon: Icon(Icons.language_outlined),
                     ),
+                    items: _languages
+                        .map(
+                          (entry) => DropdownMenuItem(
+                            value: entry['code'],
+                            child: Text(entry['label'] ?? ''),
+                          ),
+                        )
+                        .toList(),
+                    onChanged: (value) {
+                      if (value == null) return;
+                      setState(() => _selectedLanguage = value);
+                      widget.data.setLocale(
+                        language: value,
+                        region: _selectedRegion ?? 'IN',
+                      );
+                    },
                   ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: DropdownButtonFormField<String>(
-                      value: _selectedRegion,
-                      decoration: const InputDecoration(
-                        labelText: "Region",
-                        prefixIcon: Icon(Icons.public_outlined),
-                      ),
-                      items: _regions
-                          .map(
-                            (entry) => DropdownMenuItem(
-                              value: entry['code'],
-                              child: Text(entry['label'] ?? ''),
-                            ),
-                          )
-                          .toList(),
-                      onChanged: (value) {
-                        if (value == null) return;
-                        setState(() => _selectedRegion = value);
-                        widget.data.setLocale(
-                          language: _selectedLanguage ?? 'en',
-                          region: value,
-                        );
-                      },
+                  const SizedBox(height: 12),
+                  DropdownButtonFormField<String>(
+                    value: _selectedRegion,
+                    decoration: const InputDecoration(
+                      labelText: "Region",
+                      prefixIcon: Icon(Icons.public_outlined),
                     ),
+                    items: _regions
+                        .map(
+                          (entry) => DropdownMenuItem(
+                            value: entry['code'],
+                            child: Text(entry['label'] ?? ''),
+                          ),
+                        )
+                        .toList(),
+                    onChanged: (value) {
+                      if (value == null) return;
+                      setState(() => _selectedRegion = value);
+                      widget.data.setLocale(
+                        language: _selectedLanguage ?? 'en',
+                        region: value,
+                      );
+                    },
                   ),
                 ],
               ),
@@ -467,7 +474,7 @@ class _SignInCardState extends State<_SignInCard> {
                   style: FilledButton.styleFrom(
                     padding: const EdgeInsets.symmetric(vertical: 14),
                     shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16),
+                      borderRadius: BorderRadius.circular(18),
                     ),
                   ),
                   onPressed: _canSubmit ? _signInWithEmail : null,
@@ -488,7 +495,7 @@ class _SignInCardState extends State<_SignInCard> {
                   style: OutlinedButton.styleFrom(
                     padding: const EdgeInsets.symmetric(vertical: 14),
                     shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16),
+                      borderRadius: BorderRadius.circular(18),
                     ),
                   ),
                   onPressed: _isLoading ? null : _signInWithGoogle,
@@ -496,10 +503,23 @@ class _SignInCardState extends State<_SignInCard> {
                   label: const Text("Continue with Google"),
                 ),
               ),
-              const SizedBox(height: 8),
+              const SizedBox(height: 14),
+              Row(
+                children: [
+                  Expanded(child: Divider(color: Colors.grey.shade300)),
+                  const SizedBox(width: 8),
+                  Text(
+                    "New here?",
+                    style: TextStyle(color: Colors.grey.shade600),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(child: Divider(color: Colors.grey.shade300)),
+                ],
+              ),
+              const SizedBox(height: 6),
               TextButton(
                 onPressed: _isLoading ? null : _createAccount,
-                child: const Text("New here? Create an account"),
+                child: const Text("Create an account"),
               ),
             ],
           ),

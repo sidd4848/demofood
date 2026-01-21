@@ -1,11 +1,18 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 
+import '../app.dart';
 import '../models/app_data.dart';
 import '../services/profile_service.dart';
 import '../services/subscription_models.dart';
 import '../services/subscription_service.dart';
 import '../theme.dart';
 import '../widgets/branding.dart';
+import '../widgets/app_sidebar_shell.dart';
+import 'diet_generation_options_page.dart';
+import 'diet_plan_page.dart';
+import 'nutritionist_profiles_page.dart';
 
 class UpgradePlanPage extends StatelessWidget {
   final AppData data;
@@ -18,11 +25,68 @@ class UpgradePlanPage extends StatelessWidget {
     final service = const SubscriptionService();
     final locale = Localizations.localeOf(context);
     final dataFuture = _loadData(service);
+    Future<void> signOut() async {
+      await FirebaseAuth.instance.signOut();
+      await GoogleSignIn().signOut();
+      if (!context.mounted) return;
+      Navigator.pushAndRemoveUntil(
+        context,
+        MaterialPageRoute(builder: (_) => LandingPage(data: data)),
+        (_) => false,
+      );
+    }
 
-    return Scaffold(
+    return AppSidebarShell(
+      selectedIndex: 2,
+      onSignOut: signOut,
+      onDestinationSelected: (index) {
+        switch (index) {
+          case 0:
+            Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(
+                builder: (_) => DietPlanPage(
+                  data: data,
+                  preferencesBuilder: (_) => PreferencesPage(data: data),
+                ),
+              ),
+            );
+            return;
+          case 1:
+            Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(
+                builder: (_) => DietGenerationOptionsPage(
+                  data: data,
+                  preferencesBuilder: (_) => PreferencesPage(data: data),
+                ),
+              ),
+            );
+            return;
+          case 2:
+            return;
+          case 3:
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => NutritionistProfilesPage(
+                  data: data,
+                  preferencesBuilder: (_) => PreferencesPage(data: data),
+                ),
+              ),
+            );
+            return;
+        }
+      },
       appBar: AppBar(
+        leading: Builder(
+          builder: (context) => IconButton(
+            tooltip: 'Menu',
+            icon: const Icon(Icons.menu_rounded),
+            onPressed: () => Scaffold.of(context).openDrawer(),
+          ),
+        ),
         title: const Text('Upgrade plan'),
-        leading: const BackButton(),
         actions: [
           Padding(
             padding: const EdgeInsets.only(right: 12),
@@ -36,137 +100,135 @@ class UpgradePlanPage extends StatelessWidget {
           ),
         ],
       ),
-      body: SafeArea(
-        child: FutureBuilder<_UpgradePlanData>(
-          future: dataFuture,
-          builder: (context, snapshot) {
-            if (snapshot.connectionState == ConnectionState.waiting) {
-              return const Center(child: CircularProgressIndicator());
-            }
-            final dataBundle = snapshot.data;
-            if (dataBundle == null) {
-              return const Center(child: Text('Unable to load pricing.'));
-            }
-            final config = dataBundle.config;
-            final subscription = dataBundle.subscription;
-            final regionCode = data.regionCode ?? locale.countryCode ?? 'IN';
-            final regionPricing = config.resolveRegion(regionCode);
-            final activePlan = subscription?.plan.toLowerCase() ?? 'free';
-            final isProOrElite = activePlan == 'pro' || activePlan == 'elite';
-            final daysRemaining = _daysRemaining(subscription?.currentPeriodEnd);
-            return ListView(
-              padding: const EdgeInsets.all(20),
-              children: [
-                _UpgradeHero(),
-                const SizedBox(height: 20),
-                _PlanCard(
-                  title: 'Free',
-                  badge: 'Trial',
-                  priceLabel: _formatPrice(regionPricing, 'free'),
-                  description: const [
-                    '10 days trial of Elite features',
-                    'No card required for trial',
-                  ],
-                  buttonLabel: isProOrElite ? 'Free trial' : 'Current plan',
-                  buttonEnabled: false,
-                  accent: Colors.grey,
-                  compact: isProOrElite,
+      child: FutureBuilder<_UpgradePlanData>(
+        future: dataFuture,
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(child: CircularProgressIndicator());
+          }
+          final dataBundle = snapshot.data;
+          if (dataBundle == null) {
+            return const Center(child: Text('Unable to load pricing.'));
+          }
+          final config = dataBundle.config;
+          final subscription = dataBundle.subscription;
+          final regionCode = data.regionCode ?? locale.countryCode ?? 'IN';
+          final regionPricing = config.resolveRegion(regionCode);
+          final activePlan = subscription?.plan.toLowerCase() ?? 'free';
+          final isProOrElite = activePlan == 'pro' || activePlan == 'elite';
+          final daysRemaining = _daysRemaining(subscription?.currentPeriodEnd);
+          return ListView(
+            padding: const EdgeInsets.all(24),
+            children: [
+              _UpgradeHero(),
+              const SizedBox(height: 24),
+              _PlanCard(
+                title: 'Free',
+                badge: 'Trial',
+                priceLabel: _formatPrice(regionPricing, 'free'),
+                description: const [
+                  '10 days trial of Elite features',
+                  'No card required for trial',
+                ],
+                buttonLabel: isProOrElite ? 'Free trial' : 'Current plan',
+                buttonEnabled: false,
+                accent: Colors.grey,
+                compact: isProOrElite,
+              ),
+              const SizedBox(height: 16),
+              _PlanCard(
+                title: 'Pro',
+                badge: 'Most popular',
+                priceLabel: _formatPrice(regionPricing, 'pro'),
+                description: const [
+                  '7 AI-generated recipes per month',
+                  'WhatsApp message scheduling',
+                  'Voice notes for 30 days',
+                ],
+                buttonLabel: activePlan == 'pro' ? 'Current plan' : 'Upgrade to Pro',
+                buttonEnabled: activePlan != 'pro',
+                accent: kPrimary,
+                highlight: true,
+                footerText: activePlan == 'pro' && daysRemaining != null
+                    ? '$daysRemaining days remaining'
+                    : null,
+                extraAction: _buildExtendAction(
+                  context,
+                  service: service,
+                  config: config,
+                  regionPricing: regionPricing,
+                  planId: 'pro',
+                  daysRemaining: daysRemaining,
+                  messenger: messenger,
                 ),
-                const SizedBox(height: 16),
-                _PlanCard(
-                  title: 'Pro',
-                  badge: 'Most popular',
-                  priceLabel: _formatPrice(regionPricing, 'pro'),
-                  description: const [
-                    '7 AI-generated recipes per month',
-                    'WhatsApp message scheduling',
-                    'Voice notes for 30 days',
-                  ],
-                  buttonLabel: activePlan == 'pro' ? 'Current plan' : 'Upgrade to Pro',
-                  buttonEnabled: activePlan != 'pro',
-                  accent: kPrimary,
-                  highlight: true,
-                  footerText: activePlan == 'pro' && daysRemaining != null
-                      ? '$daysRemaining days remaining'
-                      : null,
-                  extraAction: _buildExtendAction(
-                    context,
-                    service: service,
-                    config: config,
-                    regionPricing: regionPricing,
-                    planId: 'pro',
-                    daysRemaining: daysRemaining,
-                    messenger: messenger,
-                  ),
-                  onTap: activePlan == 'pro'
-                      ? null
-                      : () async {
-                          final selection = await _showDurationPicker(
-                            context,
-                            config: config,
-                            regionPricing: regionPricing,
-                            planId: 'pro',
-                          );
-                          if (selection == null) return;
-                          await service.requestSubscriptionUpgrade(
-                            planId: 'pro',
-                            duration: selection.duration,
-                            price: selection.price,
-                          );
-                          messenger.showSnackBar(
-                            const SnackBar(content: Text('Upgrade request saved.')),
-                          );
-                        },
+                onTap: activePlan == 'pro'
+                    ? null
+                    : () async {
+                        final selection = await _showDurationPicker(
+                          context,
+                          config: config,
+                          regionPricing: regionPricing,
+                          planId: 'pro',
+                        );
+                        if (selection == null) return;
+                        await service.requestSubscriptionUpgrade(
+                          planId: 'pro',
+                          duration: selection.duration,
+                          price: selection.price,
+                        );
+                        messenger.showSnackBar(
+                          const SnackBar(content: Text('Upgrade request saved.')),
+                        );
+                      },
+              ),
+              const SizedBox(height: 16),
+              _PlanCard(
+                title: 'Elite',
+                badge: 'Premium',
+                priceLabel: _formatPrice(regionPricing, 'elite'),
+                description: const [
+                  'Everything in Pro',
+                  'Unlimited recipe generation',
+                  'Priority nutritionist support',
+                ],
+                buttonLabel: activePlan == 'elite' ? 'Current plan' : 'Upgrade to Elite',
+                buttonEnabled: activePlan != 'elite',
+                accent: kSecondary,
+                footerText: activePlan == 'elite' && daysRemaining != null
+                    ? '$daysRemaining days remaining'
+                    : null,
+                extraAction: _buildExtendAction(
+                  context,
+                  service: service,
+                  config: config,
+                  regionPricing: regionPricing,
+                  planId: 'elite',
+                  daysRemaining: daysRemaining,
+                  messenger: messenger,
                 ),
-                const SizedBox(height: 16),
-                _PlanCard(
-                  title: 'Elite',
-                  badge: 'Premium',
-                  priceLabel: _formatPrice(regionPricing, 'elite'),
-                  description: const [
-                    'Everything in Pro',
-                    'Unlimited recipe generation',
-                    'Priority nutritionist support',
-                  ],
-                  buttonLabel: activePlan == 'elite' ? 'Current plan' : 'Upgrade to Elite',
-                  buttonEnabled: activePlan != 'elite',
-                  accent: kSecondary,
-                  footerText: activePlan == 'elite' && daysRemaining != null
-                      ? '$daysRemaining days remaining'
-                      : null,
-                  extraAction: _buildExtendAction(
-                    context,
-                    service: service,
-                    config: config,
-                    regionPricing: regionPricing,
-                    planId: 'elite',
-                    daysRemaining: daysRemaining,
-                    messenger: messenger,
-                  ),
-                  onTap: activePlan == 'elite'
-                      ? null
-                      : () async {
-                          final selection = await _showDurationPicker(
-                            context,
-                            config: config,
-                            regionPricing: regionPricing,
-                            planId: 'elite',
-                          );
-                          if (selection == null) return;
-                          await service.requestSubscriptionUpgrade(
-                            planId: 'elite',
-                            duration: selection.duration,
-                            price: selection.price,
-                          );
-                          messenger.showSnackBar(
-                            const SnackBar(content: Text('Upgrade request saved.')),
-                          );
-                        },
-                ),
-              ],
-            );
-          },
-        ),
+                onTap: activePlan == 'elite'
+                    ? null
+                    : () async {
+                        final selection = await _showDurationPicker(
+                          context,
+                          config: config,
+                          regionPricing: regionPricing,
+                          planId: 'elite',
+                        );
+                        if (selection == null) return;
+                        await service.requestSubscriptionUpgrade(
+                          planId: 'elite',
+                          duration: selection.duration,
+                          price: selection.price,
+                        );
+                        messenger.showSnackBar(
+                          const SnackBar(content: Text('Upgrade request saved.')),
+                        );
+                      },
+              ),
+            ],
+          );
+        },
       ),
     );
   }
@@ -516,14 +578,11 @@ class _UpgradeHero extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.all(22),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(24),
-        gradient: LinearGradient(
-          colors: [kPrimary, kSecondary],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
+        color: Theme.of(context).cardColor,
+        border: Border.all(color: Colors.grey.shade200),
       ),
       child: Row(
         children: [
@@ -533,12 +592,12 @@ class _UpgradeHero extends StatelessWidget {
               children: [
                 const Text(
                   'Upgrade your nutrition',
-                  style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w800),
+                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800),
                 ),
                 const SizedBox(height: 6),
                 Text(
                   'Unlock smarter AI plans, priority support, and weekly check-ins.',
-                  style: TextStyle(color: Colors.white.withOpacity(0.9), height: 1.4),
+                  style: TextStyle(color: Colors.grey.shade700, height: 1.4),
                 ),
               ],
             ),
@@ -548,10 +607,10 @@ class _UpgradeHero extends StatelessWidget {
             height: 56,
             width: 56,
             decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.2),
+              color: kPrimary.withOpacity(0.12),
               borderRadius: BorderRadius.circular(16),
             ),
-            child: const Icon(Icons.rocket_launch_rounded, color: Colors.white),
+            child: Icon(Icons.rocket_launch_rounded, color: kPrimary),
           ),
         ],
       ),
