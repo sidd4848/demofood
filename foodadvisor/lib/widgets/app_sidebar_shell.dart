@@ -49,14 +49,15 @@ class AppSidebarShell extends StatelessWidget {
               Expanded(
                 child: NavigationRailTheme(
                   data: NavigationRailThemeData(
-                    labelTextStyle: MaterialStateProperty.resolveWith(
-                      (states) => TextStyle(
-                        fontSize: 15,
-                        fontWeight: states.contains(MaterialState.selected) ? FontWeight.w700 : FontWeight.w600,
-                        color: states.contains(MaterialState.selected)
-                            ? Theme.of(context).colorScheme.primary
-                            : Colors.grey.shade700,
-                      ),
+                    selectedLabelTextStyle: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700,
+                      color: Theme.of(context).colorScheme.primary,
+                    ),
+                    unselectedLabelTextStyle: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.grey.shade700,
                     ),
                   ),
                   child: NavigationRail(
