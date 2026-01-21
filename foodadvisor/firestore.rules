@@ -2,57 +2,71 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function immutableUserFields() {
+      return [
+        'plan',
+        'subscriptionStatus',
+        'subscriptionId',
+        'currentPeriodEnd',
+        'quota'
+      ];
+    }
+
     match /users/{userId} {
       // User can always read their own profile.
-      allow read: if request.auth != null && request.auth.uid == userId;
+      allow read: if isOwner(userId);
 
       // User can CREATE their document freely (first time signup).
-      allow create: if request.auth != null && request.auth.uid == userId;
+      allow create: if isOwner(userId);
 
       // User can UPDATE, BUT NOT TOUCH SUBSCRIPTION FIELDS.
-      allow update: if request.auth != null
-          && request.auth.uid == userId
-          && !request.resource.data.diff(resource.data).changedKeys().hasAny([
-            'plan',
-            'subscriptionStatus',
-            'subscriptionId',
-            'currentPeriodEnd'
-          ]);
+      allow update: if isOwner(userId)
+          && !request.resource.data.diff(resource.data).changedKeys().hasAny(immutableUserFields());
 
       allow delete: if false;
     }
 
     match /dietGeneration/{userId} {
-      allow read, write: if request.auth != null && request.auth.uid == userId;
+      allow read, write: if isOwner(userId);
     }
 
     match /diet/{jobId} {
-      allow create: if request.auth != null && request.resource.data.userId == request.auth.uid;
-      allow read: if request.auth != null && resource.data.userId == request.auth.uid;
-      allow update: if request.auth != null && request.resource.data.userId == request.auth.uid;
+      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
+      allow read: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow update: if isSignedIn()
+          && resource.data.userId == request.auth.uid
+          && request.resource.data.userId == request.auth.uid;
       allow delete: if false;
     }
 
     match /prompt/{promptId} {
-      allow read: if request.auth != null;
+      allow read: if isSignedIn();
       allow write: if false;
     }
 
     match /subscriptionConfig/{configId} {
-      allow read: if request.auth != null;
+      allow read: if isSignedIn();
       allow write: if false;
     }
 
     match /subscriptionUpgradeRequests/{requestId} {
-      allow create: if request.auth != null
+      allow create: if isSignedIn()
         && request.resource.data.userId == request.auth.uid
         && request.resource.data.status == 'created';
-      allow read: if request.auth != null && resource.data.userId == request.auth.uid;
+      allow read: if isSignedIn() && resource.data.userId == request.auth.uid;
       allow update, delete: if false;
     }
 
     match /subscriptionRequests/{requestId} {
-      allow read: if request.auth != null && resource.data.userId == request.auth.uid;
+      allow read: if isSignedIn() && resource.data.userId == request.auth.uid;
       allow write: if false;
     }
 
@@ -61,9 +75,20 @@ service cloud.firestore {
     }
 
     match /aiDietPlans/{planId} {
-      allow create: if request.auth != null && request.resource.data.userId == request.auth.uid;
-      allow read: if request.auth != null && resource.data.userId == request.auth.uid;
+      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
+      allow read: if isSignedIn() && resource.data.userId == request.auth.uid;
       allow update, delete: if false;
+    }
+
+    match /recipeRequests/{requestId} {
+      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
+      allow read: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow update, delete: if false;
+    }
+
+    match /nutritionExperts/{expertId} {
+      allow read: if isSignedIn();
+      allow write: if false;
     }
   }
 }
