@@ -139,7 +139,7 @@ class _LockedNutritionistState extends StatelessWidget {
                   color: kSecondary.withOpacity(0.15),
                   borderRadius: BorderRadius.circular(16),
                 ),
-                child: const Icon(Icons.lock_outline, color: kSecondary),
+                child: Icon(Icons.lock_outline, color: kSecondary),
               ),
               const SizedBox(height: 14),
               const Text(
@@ -197,7 +197,7 @@ class _NutritionistCard extends StatelessWidget {
                 CircleAvatar(
                   radius: 24,
                   backgroundColor: kPrimary.withOpacity(0.15),
-                  child: const Icon(Icons.person, color: kPrimary),
+                  child: Icon(Icons.person, color: kPrimary),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
@@ -263,11 +263,11 @@ class _RatingPill extends StatelessWidget {
       ),
       child: Row(
         children: [
-          const Icon(Icons.star, size: 16, color: kSecondary),
+          Icon(Icons.star, size: 16, color: kSecondary),
           const SizedBox(width: 4),
           Text(
             rating.toStringAsFixed(1),
-            style: const TextStyle(fontWeight: FontWeight.w700, color: kSecondary),
+            style: TextStyle(fontWeight: FontWeight.w700, color: kSecondary),
           ),
         ],
       ),

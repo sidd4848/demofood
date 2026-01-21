@@ -591,7 +591,7 @@ class _UpgradeHero extends StatelessWidget {
               color: kPrimary.withOpacity(0.12),
               borderRadius: BorderRadius.circular(16),
             ),
-            child: const Icon(Icons.rocket_launch_rounded, color: kPrimary),
+            child: Icon(Icons.rocket_launch_rounded, color: kPrimary),
           ),
         ],
       ),

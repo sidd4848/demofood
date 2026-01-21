@@ -1411,7 +1411,7 @@ class _DietHeader extends StatelessWidget {
               borderRadius: BorderRadius.circular(16),
               color: kPrimary.withOpacity(0.12),
             ),
-            child: const Icon(Icons.restaurant_menu_rounded, color: kPrimary),
+            child: Icon(Icons.restaurant_menu_rounded, color: kPrimary),
           ),
           const SizedBox(width: 12),
           Expanded(
