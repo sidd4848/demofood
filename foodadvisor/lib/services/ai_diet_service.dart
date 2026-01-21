@@ -8,6 +8,16 @@ class AiDietService {
 
   static const collectionName = 'aiDietPlans';
 
+  Future<int> countRecentRequests({required String userId, Duration window = const Duration(days: 7)}) async {
+    final since = DateTime.now().subtract(window);
+    final snapshot = await FirebaseFirestore.instance
+        .collection(collectionName)
+        .where('userId', isEqualTo: userId)
+        .where('createdAt', isGreaterThanOrEqualTo: Timestamp.fromDate(since))
+        .get();
+    return snapshot.docs.length;
+  }
+
   Future<bool> hasRecentRequest({required String userId}) async {
     final since = DateTime.now().subtract(const Duration(days: 7));
     final snapshot = await FirebaseFirestore.instance

@@ -61,6 +61,33 @@ class SubscriptionSummary {
   final DateTime? currentPeriodEnd;
 }
 
+class PlanQuota {
+  const PlanQuota({
+    required this.recipe,
+    required this.dietRegeneration,
+  });
+
+  final int recipe;
+  final int dietRegeneration;
+
+  factory PlanQuota.fromJson(Map<String, dynamic>? data) {
+    return PlanQuota(
+      recipe: (data?['recipe'] as num?)?.toInt() ?? 0,
+      dietRegeneration: (data?['diet_regeneration'] as num?)?.toInt() ?? 0,
+    );
+  }
+}
+
+class UserQuotaSummary {
+  const UserQuotaSummary({
+    this.proQuota,
+    this.trialQuota,
+  });
+
+  final PlanQuota? proQuota;
+  final PlanQuota? trialQuota;
+}
+
 Future<void> saveProfileToFirebase(AppData data) async {
   final user = FirebaseAuth.instance.currentUser;
   if (user == null) {
@@ -82,6 +109,16 @@ Future<void> saveProfileToFirebase(AppData data) async {
       'subscriptionStatus': 'trial',
       'subscriptionId': null,
       'currentPeriodEnd': null,
+      'quota': {
+        'pro_quota': {
+          'recipe': 0,
+          'diet_regeneration': 0,
+        },
+        'trial_quota': {
+          'recipe': 3,
+          'diet_regeneration': 3,
+        },
+      },
     });
   }
   await ref.set(profileData, SetOptions(merge: true));
@@ -128,6 +165,23 @@ Future<SubscriptionSummary?> fetchUserSubscription() async {
     status: status,
     subscriptionId: subscriptionId,
     currentPeriodEnd: currentPeriodEnd,
+  );
+}
+
+Future<UserQuotaSummary?> fetchUserQuotaSummary() async {
+  final user = FirebaseAuth.instance.currentUser;
+  if (user == null) return null;
+  final snapshot = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
+  if (!snapshot.exists) return null;
+  final data = snapshot.data();
+  if (data == null) return null;
+  final quota = data['quota'];
+  if (quota is! Map<String, dynamic>) return null;
+  final proQuota = quota['pro_quota'];
+  final trialQuota = quota['trial_quota'];
+  return UserQuotaSummary(
+    proQuota: PlanQuota.fromJson(proQuota is Map<String, dynamic> ? proQuota : null),
+    trialQuota: PlanQuota.fromJson(trialQuota is Map<String, dynamic> ? trialQuota : null),
   );
 }
 
@@ -219,6 +273,7 @@ Future<void> saveSelfDietPlan({
     'jobId': jobId,
     'userId': user.uid,
     'generatedBy': 'self',
+    'createdBy': 'self',
     'calorie deficit': calorieDeficit,
     'plan': plan,
     'updatedBy': user.uid,
