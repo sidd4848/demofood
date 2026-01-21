@@ -79,8 +79,14 @@ class UpgradePlanPage extends StatelessWidget {
         }
       },
       appBar: AppBar(
+        leading: Builder(
+          builder: (context) => IconButton(
+            tooltip: 'Menu',
+            icon: const Icon(Icons.menu_rounded),
+            onPressed: () => Scaffold.of(context).openDrawer(),
+          ),
+        ),
         title: const Text('Upgrade plan'),
-        leading: const BackButton(),
         actions: [
           Padding(
             padding: const EdgeInsets.only(right: 12),

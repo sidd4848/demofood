@@ -4,13 +4,12 @@ import '../theme.dart';
 import '../theme_config.dart';
 import 'branding.dart';
 
-class AppSidebarShell extends StatefulWidget {
+class AppSidebarShell extends StatelessWidget {
   final int selectedIndex;
   final ValueChanged<int> onDestinationSelected;
   final PreferredSizeWidget? appBar;
   final Widget child;
   final VoidCallback? onSignOut;
-  final bool initialExtended;
 
   const AppSidebarShell({
     super.key,
@@ -19,110 +18,82 @@ class AppSidebarShell extends StatefulWidget {
     required this.child,
     this.appBar,
     this.onSignOut,
-    this.initialExtended = false,
   });
-
-  @override
-  State<AppSidebarShell> createState() => _AppSidebarShellState();
-}
-
-class _AppSidebarShellState extends State<AppSidebarShell> {
-  late bool _isExtended;
-
-  @override
-  void initState() {
-    super.initState();
-    _isExtended = widget.initialExtended;
-  }
 
   @override
   Widget build(BuildContext context) {
     final config = AppThemeConfig.current;
     return Scaffold(
       appBar: widget.appBar,
-      body: SafeArea(
-        child: Row(
-          children: [
-            NavigationRail(
-              selectedIndex: widget.selectedIndex,
-              onDestinationSelected: widget.onDestinationSelected,
-              extended: _isExtended,
-              labelType: _isExtended ? null : NavigationRailLabelType.selected,
-              minExtendedWidth: 220,
-              groupAlignment: -0.9,
-              backgroundColor: Theme.of(context).cardColor,
-              leading: Padding(
-                padding: const EdgeInsets.fromLTRB(16, 12, 16, 20),
-                child: Column(
-                  crossAxisAlignment: _isExtended ? CrossAxisAlignment.start : CrossAxisAlignment.center,
+      drawer: Drawer(
+        child: SafeArea(
+          child: Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+                child: Row(
                   children: [
-                    IconButton(
-                      tooltip: _isExtended ? 'Collapse sidebar' : 'Expand sidebar',
-                      icon: Icon(_isExtended ? Icons.chevron_left_rounded : Icons.chevron_right_rounded),
-                      onPressed: () {
-                        setState(() {
-                          _isExtended = !_isExtended;
-                        });
-                      },
+                    _SidebarLogo(config: config),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        config.appName,
+                        style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16),
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ),
-                    const SizedBox(height: 12),
-                    if (_isExtended)
-                      Row(
-                        children: [
-                          _SidebarLogo(config: config),
-                          const SizedBox(width: 10),
-                          SizedBox(
-                            width: 140,
-                            child: Text(
-                              config.appName,
-                              style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16),
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                        ],
-                      )
-                    else
-                      _SidebarLogo(config: config),
                   ],
                 ),
               ),
-              trailing: widget.onSignOut == null
-                  ? null
-                  : Padding(
-                      padding: const EdgeInsets.only(bottom: 16),
-                      child: _SidebarSignOutButton(
-                        extended: _isExtended,
-                        onTap: widget.onSignOut!,
-                      ),
+              const Divider(height: 24),
+              Expanded(
+                child: NavigationRail(
+                  selectedIndex: widget.selectedIndex,
+                  onDestinationSelected: (index) {
+                    Navigator.pop(context);
+                    widget.onDestinationSelected(index);
+                  },
+                  extended: true,
+                  minExtendedWidth: 220,
+                  groupAlignment: -0.9,
+                  backgroundColor: Theme.of(context).cardColor,
+                  destinations: const [
+                    NavigationRailDestination(
+                      icon: Icon(Icons.restaurant_menu_outlined),
+                      selectedIcon: Icon(Icons.restaurant_menu_rounded),
+                      label: Text('Diet plan'),
                     ),
-              destinations: const [
-                NavigationRailDestination(
-                  icon: Icon(Icons.restaurant_menu_outlined),
-                  selectedIcon: Icon(Icons.restaurant_menu_rounded),
-                  label: Text('Diet plan'),
+                    NavigationRailDestination(
+                      icon: Icon(Icons.auto_awesome_outlined),
+                      selectedIcon: Icon(Icons.auto_awesome_rounded),
+                      label: Text('Generate diet'),
+                    ),
+                    NavigationRailDestination(
+                      icon: Icon(Icons.workspace_premium_outlined),
+                      selectedIcon: Icon(Icons.workspace_premium_rounded),
+                      label: Text('Upgrade'),
+                    ),
+                    NavigationRailDestination(
+                      icon: Icon(Icons.health_and_safety_outlined),
+                      selectedIcon: Icon(Icons.health_and_safety_rounded),
+                      label: Text('Experts'),
+                    ),
+                  ],
                 ),
-                NavigationRailDestination(
-                  icon: Icon(Icons.auto_awesome_outlined),
-                  selectedIcon: Icon(Icons.auto_awesome_rounded),
-                  label: Text('Generate diet'),
+              ),
+              if (widget.onSignOut != null)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+                  child: _SidebarSignOutButton(
+                    extended: true,
+                    onTap: widget.onSignOut!,
+                  ),
                 ),
-                NavigationRailDestination(
-                  icon: Icon(Icons.workspace_premium_outlined),
-                  selectedIcon: Icon(Icons.workspace_premium_rounded),
-                  label: Text('Upgrade'),
-                ),
-                NavigationRailDestination(
-                  icon: Icon(Icons.health_and_safety_outlined),
-                  selectedIcon: Icon(Icons.health_and_safety_rounded),
-                  label: Text('Experts'),
-                ),
-              ],
-            ),
-            const VerticalDivider(width: 1),
-            Expanded(child: widget.child),
-          ],
+            ],
+          ),
         ),
       ),
+      body: SafeArea(child: widget.child),
     );
   }
 }

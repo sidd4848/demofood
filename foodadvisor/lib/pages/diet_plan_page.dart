@@ -781,22 +781,28 @@ class _DietPlanPageState extends State<DietPlanPage> {
               }
             },
             appBar: AppBar(
-              leadingWidth: 140,
-              leading: Padding(
-                padding: const EdgeInsets.only(left: 12),
-                child: PlanBadge(
-                  label: _planLabel(snapshot.data?.subscription),
-                  onTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (_) => UpgradePlanPage(data: widget.data)),
-                    );
-                  },
+              leading: Builder(
+                builder: (context) => IconButton(
+                  tooltip: 'Menu',
+                  icon: const Icon(Icons.menu_rounded),
+                  onPressed: () => Scaffold.of(context).openDrawer(),
                 ),
               ),
               title: const Text("Diet details"),
               automaticallyImplyLeading: false,
               actions: [
+                Padding(
+                  padding: const EdgeInsets.only(right: 6),
+                  child: PlanBadge(
+                    label: _planLabel(snapshot.data?.subscription),
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (_) => UpgradePlanPage(data: widget.data)),
+                      );
+                    },
+                  ),
+                ),
                 IconButton(
                   tooltip: "Refresh",
                   onPressed: _refreshPlan,

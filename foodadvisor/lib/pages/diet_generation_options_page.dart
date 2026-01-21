@@ -138,6 +138,13 @@ class _DietGenerationOptionsPageState extends State<DietGenerationOptionsPage> {
         }
       },
       appBar: AppBar(
+        leading: Builder(
+          builder: (context) => IconButton(
+            tooltip: 'Menu',
+            icon: const Icon(Icons.menu_rounded),
+            onPressed: () => Scaffold.of(context).openDrawer(),
+          ),
+        ),
         title: const Text("Choose your plan style"),
       ),
       child: FutureBuilder<SubscriptionSummary?>(

@@ -74,6 +74,13 @@ class NutritionistProfilesPage extends StatelessWidget {
         }
       },
       appBar: AppBar(
+        leading: Builder(
+          builder: (context) => IconButton(
+            tooltip: 'Menu',
+            icon: const Icon(Icons.menu_rounded),
+            onPressed: () => Scaffold.of(context).openDrawer(),
+          ),
+        ),
         title: const Text('Nutrition experts'),
       ),
       child: FutureBuilder<SubscriptionSummary?>(
