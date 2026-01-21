@@ -38,7 +38,7 @@ class AppSidebarShell extends StatelessWidget {
                     Expanded(
                       child: Text(
                         config.appName,
-                        style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16),
+                        style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 17),
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
@@ -47,38 +47,51 @@ class AppSidebarShell extends StatelessWidget {
               ),
               const Divider(height: 24),
               Expanded(
-                child: NavigationRail(
-                  selectedIndex: selectedIndex,
-                  onDestinationSelected: (index) {
-                    Navigator.pop(context);
-                    onDestinationSelected(index);
-                  },
-                  extended: true,
-                  minExtendedWidth: 220,
-                  groupAlignment: -0.9,
-                  backgroundColor: Theme.of(context).cardColor,
-                  destinations: const [
-                    NavigationRailDestination(
-                      icon: Icon(Icons.restaurant_menu_outlined),
-                      selectedIcon: Icon(Icons.restaurant_menu_rounded),
-                      label: Text('Diet plan'),
+                child: NavigationRailTheme(
+                  data: NavigationRailThemeData(
+                    labelTextStyle: MaterialStateProperty.resolveWith(
+                      (states) => TextStyle(
+                        fontSize: 15,
+                        fontWeight: states.contains(MaterialState.selected) ? FontWeight.w700 : FontWeight.w600,
+                        color: states.contains(MaterialState.selected)
+                            ? Theme.of(context).colorScheme.primary
+                            : Colors.grey.shade700,
+                      ),
                     ),
-                    NavigationRailDestination(
-                      icon: Icon(Icons.auto_awesome_outlined),
-                      selectedIcon: Icon(Icons.auto_awesome_rounded),
-                      label: Text('Generate diet'),
-                    ),
-                    NavigationRailDestination(
-                      icon: Icon(Icons.workspace_premium_outlined),
-                      selectedIcon: Icon(Icons.workspace_premium_rounded),
-                      label: Text('Upgrade'),
-                    ),
-                    NavigationRailDestination(
-                      icon: Icon(Icons.health_and_safety_outlined),
-                      selectedIcon: Icon(Icons.health_and_safety_rounded),
-                      label: Text('Experts'),
-                    ),
-                  ],
+                  ),
+                  child: NavigationRail(
+                    selectedIndex: selectedIndex,
+                    onDestinationSelected: (index) {
+                      Navigator.pop(context);
+                      onDestinationSelected(index);
+                    },
+                    extended: true,
+                    minExtendedWidth: 240,
+                    groupAlignment: -0.9,
+                    backgroundColor: Theme.of(context).cardColor,
+                    destinations: const [
+                      NavigationRailDestination(
+                        icon: Icon(Icons.restaurant_menu_outlined),
+                        selectedIcon: Icon(Icons.restaurant_menu_rounded),
+                        label: Text('Diet plan'),
+                      ),
+                      NavigationRailDestination(
+                        icon: Icon(Icons.auto_awesome_outlined),
+                        selectedIcon: Icon(Icons.auto_awesome_rounded),
+                        label: Text('Generate diet'),
+                      ),
+                      NavigationRailDestination(
+                        icon: Icon(Icons.workspace_premium_outlined),
+                        selectedIcon: Icon(Icons.workspace_premium_rounded),
+                        label: Text('Upgrade'),
+                      ),
+                      NavigationRailDestination(
+                        icon: Icon(Icons.health_and_safety_outlined),
+                        selectedIcon: Icon(Icons.health_and_safety_rounded),
+                        label: Text('Experts'),
+                      ),
+                    ],
+                  ),
                 ),
               ),
               if (onSignOut != null)

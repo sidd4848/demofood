@@ -111,8 +111,8 @@ Future<void> saveProfileToFirebase(AppData data) async {
       'currentPeriodEnd': null,
       'quota': {
         'pro_quota': {
-          'recipe': 3,
-          'diet_regeneration': 3,
+          'recipe': 0,
+          'diet_regeneration': 0,
         },
         'trial_quota': {
           'recipe': 3,

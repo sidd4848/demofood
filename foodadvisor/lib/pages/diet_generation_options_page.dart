@@ -28,12 +28,23 @@ class DietGenerationOptionsPage extends StatefulWidget {
 
 class _DietGenerationOptionsPageState extends State<DietGenerationOptionsPage> {
   bool _isSavingSelf = false;
-  late Future<SubscriptionSummary?> _subscriptionFuture;
+  late Future<_AccessSnapshot> _accessFuture;
 
   @override
   void initState() {
     super.initState();
-    _subscriptionFuture = fetchUserSubscription();
+    _accessFuture = _loadAccess();
+  }
+
+  Future<_AccessSnapshot> _loadAccess() async {
+    final results = await Future.wait([
+      fetchUserSubscription(),
+      fetchUserQuotaSummary(),
+    ]);
+    return _AccessSnapshot(
+      subscription: results[0] as SubscriptionSummary?,
+      quota: results[1] as UserQuotaSummary?,
+    );
   }
 
   void _showUpgradeDialog() {
@@ -119,8 +130,8 @@ class _DietGenerationOptionsPageState extends State<DietGenerationOptionsPage> {
             );
             return;
           case 3:
-            final subscription = await _subscriptionFuture;
-            final tier = resolvePlanTier(subscription);
+            final access = await _accessFuture;
+            final tier = resolvePlanTier(access.subscription);
             if (!canAccessNutritionist(tier)) {
               _showUpgradeDialog();
               return;
@@ -147,11 +158,15 @@ class _DietGenerationOptionsPageState extends State<DietGenerationOptionsPage> {
         ),
         title: const Text("Choose your plan style"),
       ),
-      child: FutureBuilder<SubscriptionSummary?>(
-        future: _subscriptionFuture,
+      child: FutureBuilder<_AccessSnapshot>(
+        future: _accessFuture,
         builder: (context, snapshot) {
-          final planTier = resolvePlanTier(snapshot.data);
+          final access = snapshot.data;
+          final planTier = resolvePlanTier(access?.subscription);
           final canUseNutritionist = canAccessNutritionist(planTier);
+          final aiQuota = quotaForTier(access?.quota, planTier)?.dietRegeneration ?? 0;
+          final canUseAi = planTier == PlanTier.elite ||
+              ((planTier == PlanTier.pro || planTier == PlanTier.trial) && aiQuota > 0);
           return ListView(
             padding: const EdgeInsets.all(24),
             children: [
@@ -170,7 +185,13 @@ class _DietGenerationOptionsPageState extends State<DietGenerationOptionsPage> {
                 description: "Fast, smart suggestions tailored to your profile.",
                 icon: Icons.auto_awesome_rounded,
                 accent: kPrimary,
-                onTap: () => _saveChoiceAndOpen(context, 'ai'),
+                onTap: () {
+                  if (!canUseAi) {
+                    _showUpgradeDialog();
+                    return;
+                  }
+                  _saveChoiceAndOpen(context, 'ai');
+                },
               ),
               const SizedBox(height: 16),
               _OptionCard(
@@ -209,6 +230,16 @@ class _DietGenerationOptionsPageState extends State<DietGenerationOptionsPage> {
       ),
     );
   }
+}
+
+class _AccessSnapshot {
+  final SubscriptionSummary? subscription;
+  final UserQuotaSummary? quota;
+
+  const _AccessSnapshot({
+    required this.subscription,
+    required this.quota,
+  });
 }
 
 class _OptionCard extends StatelessWidget {
