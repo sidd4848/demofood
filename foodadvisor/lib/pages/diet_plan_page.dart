@@ -197,6 +197,17 @@ class _DietPlanPageState extends State<DietPlanPage> {
     );
   }
 
+  Future<void> _signOut() async {
+    await FirebaseAuth.instance.signOut();
+    await GoogleSignIn().signOut();
+    if (!mounted) return;
+    Navigator.pushAndRemoveUntil(
+      context,
+      MaterialPageRoute(builder: (_) => LandingPage(data: widget.data)),
+      (_) => false,
+    );
+  }
+
   Future<String?> _showAiTweaksDialog() async {
     final suggestions = [
       'Diet too fancy',
@@ -727,6 +738,7 @@ class _DietPlanPageState extends State<DietPlanPage> {
         builder: (context, snapshot) {
           return AppSidebarShell(
             selectedIndex: 0,
+            onSignOut: _signOut,
             onDestinationSelected: (index) async {
               switch (index) {
                 case 0:
@@ -790,87 +802,42 @@ class _DietPlanPageState extends State<DietPlanPage> {
                   onPressed: _refreshPlan,
                   icon: const Icon(Icons.refresh_rounded),
                 ),
-                PopupMenuButton<_PlanMenuAction>(
-                  onSelected: (action) async {
-                    switch (action) {
-                      case _PlanMenuAction.updateDetails:
-                        widget.data.reset();
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => UserDetailsPage(
-                              data: widget.data,
-                              nextPageBuilder: widget.preferencesBuilder,
-                            ),
-                          ),
-                        );
-                        break;
-                      case _PlanMenuAction.upgradePlan:
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(builder: (_) => UpgradePlanPage(data: widget.data)),
-                        );
-                        break;
-                      case _PlanMenuAction.about:
-                        showDialog<void>(
-                          context: context,
-                          builder: (_) => AlertDialog(
-                            title: const Text("About FoodAdvisor"),
-                            content: const Text(
-                              "FoodAdvisor helps you stay consistent with balanced meal plans and daily progress.",
-                            ),
-                            actions: [
-                              TextButton(
-                                onPressed: () => Navigator.pop(context),
-                                child: const Text("Close"),
-                              ),
-                            ],
-                          ),
-                        );
-                        break;
-                      case _PlanMenuAction.signOut:
-                        await FirebaseAuth.instance.signOut();
-                        await GoogleSignIn().signOut();
-                        if (!mounted) return;
-                        Navigator.pushAndRemoveUntil(
-                          context,
-                          MaterialPageRoute(builder: (_) => LandingPage(data: widget.data)),
-                          (_) => false,
-                        );
-                        break;
-                    }
+                IconButton(
+                  tooltip: "Update details",
+                  onPressed: () {
+                    widget.data.reset();
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => UserDetailsPage(
+                          data: widget.data,
+                          nextPageBuilder: widget.preferencesBuilder,
+                        ),
+                      ),
+                    );
                   },
-                  itemBuilder: (context) => const [
-                    PopupMenuItem(
-                      value: _PlanMenuAction.updateDetails,
-                      child: ListTile(
-                        leading: Icon(Icons.manage_accounts_outlined),
-                        title: Text("Update details"),
+                  icon: const Icon(Icons.manage_accounts_outlined),
+                ),
+                IconButton(
+                  tooltip: "About",
+                  onPressed: () {
+                    showDialog<void>(
+                      context: context,
+                      builder: (_) => AlertDialog(
+                        title: const Text("About FoodAdvisor"),
+                        content: const Text(
+                          "FoodAdvisor helps you stay consistent with balanced meal plans and daily progress.",
+                        ),
+                        actions: [
+                          TextButton(
+                            onPressed: () => Navigator.pop(context),
+                            child: const Text("Close"),
+                          ),
+                        ],
                       ),
-                    ),
-                    PopupMenuItem(
-                      value: _PlanMenuAction.upgradePlan,
-                      child: ListTile(
-                        leading: Icon(Icons.workspace_premium_outlined),
-                        title: Text("Upgrade plan"),
-                      ),
-                    ),
-                    PopupMenuItem(
-                      value: _PlanMenuAction.about,
-                      child: ListTile(
-                        leading: Icon(Icons.info_outline),
-                        title: Text("About"),
-                      ),
-                    ),
-                    PopupMenuDivider(),
-                    PopupMenuItem(
-                      value: _PlanMenuAction.signOut,
-                      child: ListTile(
-                        leading: Icon(Icons.logout_rounded),
-                        title: Text("Sign out"),
-                      ),
-                    ),
-                  ],
+                    );
+                  },
+                  icon: const Icon(Icons.info_outline),
                 ),
               ],
             ),
@@ -881,8 +848,6 @@ class _DietPlanPageState extends State<DietPlanPage> {
     );
   }
 }
-
-enum _PlanMenuAction { updateDetails, upgradePlan, about, signOut }
 
 class _DietPlanBundle {
   final DietPlanData? plan;

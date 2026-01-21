@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 
 import '../app.dart';
 import '../models/app_data.dart';
@@ -23,9 +25,20 @@ class UpgradePlanPage extends StatelessWidget {
     final service = const SubscriptionService();
     final locale = Localizations.localeOf(context);
     final dataFuture = _loadData(service);
+    Future<void> signOut() async {
+      await FirebaseAuth.instance.signOut();
+      await GoogleSignIn().signOut();
+      if (!context.mounted) return;
+      Navigator.pushAndRemoveUntil(
+        context,
+        MaterialPageRoute(builder: (_) => LandingPage(data: data)),
+        (_) => false,
+      );
+    }
 
     return AppSidebarShell(
       selectedIndex: 2,
+      onSignOut: signOut,
       onDestinationSelected: (index) {
         switch (index) {
           case 0:

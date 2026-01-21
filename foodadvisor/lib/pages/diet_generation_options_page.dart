@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 
 import '../models/app_data.dart';
 import '../services/profile_service.dart';
 import '../services/plan_access.dart';
 import '../theme.dart';
 import '../widgets/app_sidebar_shell.dart';
+import '../app.dart';
 import 'diet_plan_page.dart';
 import 'nutritionist_profiles_page.dart';
 import 'upgrade_plan_page.dart';
@@ -59,6 +62,17 @@ class _DietGenerationOptionsPageState extends State<DietGenerationOptionsPage> {
     );
   }
 
+  Future<void> _signOut() async {
+    await FirebaseAuth.instance.signOut();
+    await GoogleSignIn().signOut();
+    if (!mounted) return;
+    Navigator.pushAndRemoveUntil(
+      context,
+      MaterialPageRoute(builder: (_) => LandingPage(data: widget.data)),
+      (_) => false,
+    );
+  }
+
   Future<void> _saveChoiceAndOpen(BuildContext context, String generatedBy) async {
     if (generatedBy == 'self') {
       setState(() {
@@ -82,6 +96,7 @@ class _DietGenerationOptionsPageState extends State<DietGenerationOptionsPage> {
   Widget build(BuildContext context) {
     return AppSidebarShell(
       selectedIndex: 1,
+      onSignOut: _signOut,
       onDestinationSelected: (index) async {
         switch (index) {
           case 0:

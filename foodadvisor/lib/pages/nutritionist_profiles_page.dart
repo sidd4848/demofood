@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 
 import '../models/app_data.dart';
 import '../services/nutritionist_service.dart';
@@ -6,6 +8,7 @@ import '../services/plan_access.dart';
 import '../services/profile_service.dart';
 import '../theme.dart';
 import '../widgets/app_sidebar_shell.dart';
+import '../app.dart';
 import 'diet_generation_options_page.dart';
 import 'diet_plan_page.dart';
 import 'upgrade_plan_page.dart';
@@ -23,8 +26,19 @@ class NutritionistProfilesPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     const service = NutritionistService();
+    Future<void> signOut() async {
+      await FirebaseAuth.instance.signOut();
+      await GoogleSignIn().signOut();
+      if (!context.mounted) return;
+      Navigator.pushAndRemoveUntil(
+        context,
+        MaterialPageRoute(builder: (_) => LandingPage(data: data)),
+        (_) => false,
+      );
+    }
     return AppSidebarShell(
       selectedIndex: 3,
+      onSignOut: signOut,
       onDestinationSelected: (index) {
         switch (index) {
           case 0:
