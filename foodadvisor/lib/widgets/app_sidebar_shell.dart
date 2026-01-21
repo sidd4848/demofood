@@ -50,7 +50,8 @@ class AppSidebarShell extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(width: 10),
-                    Expanded(
+                    SizedBox(
+                      width: 140,
                       child: Text(
                         config.appName,
                         style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16),
