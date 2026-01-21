@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 
 import '../models/app_data.dart';
 import '../services/profile_service.dart';
+import '../services/plan_access.dart';
 import '../theme.dart';
 import 'diet_plan_page.dart';
+import 'nutritionist_profiles_page.dart';
 import 'upgrade_plan_page.dart';
 
 class DietGenerationOptionsPage extends StatefulWidget {
@@ -22,6 +24,39 @@ class DietGenerationOptionsPage extends StatefulWidget {
 
 class _DietGenerationOptionsPageState extends State<DietGenerationOptionsPage> {
   bool _isSavingSelf = false;
+  late Future<SubscriptionSummary?> _subscriptionFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _subscriptionFuture = fetchUserSubscription();
+  }
+
+  void _showUpgradeDialog() {
+    showDialog<void>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text("Upgrade plan"),
+        content: const Text("Upgrade to unlock this experience."),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text("Back"),
+          ),
+          FilledButton(
+            onPressed: () {
+              Navigator.pop(context);
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => UpgradePlanPage(data: widget.data)),
+              );
+            },
+            child: const Text("Upgrade plan"),
+          ),
+        ],
+      ),
+    );
+  }
 
   Future<void> _saveChoiceAndOpen(BuildContext context, String generatedBy) async {
     if (generatedBy == 'self') {
@@ -49,68 +84,60 @@ class _DietGenerationOptionsPageState extends State<DietGenerationOptionsPage> {
         title: const Text("Choose your plan style"),
       ),
       body: SafeArea(
-        child: ListView(
-          padding: const EdgeInsets.all(20),
-          children: [
-            const Text(
-              "How would you like to generate your diet plan?",
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              "Pick the experience that fits you best. You can change this later.",
-              style: TextStyle(color: Colors.grey.shade700, height: 1.4),
-            ),
-            const SizedBox(height: 20),
-            _OptionCard(
-              title: "Generate diet with AI",
-              description: "Fast, smart suggestions tailored to your profile.",
-              icon: Icons.auto_awesome_rounded,
-              accent: kPrimary,
-              onTap: () => _saveChoiceAndOpen(context, 'ai'),
-            ),
-            const SizedBox(height: 16),
-            _OptionCard(
-              title: "Generate diet with Expert Nutritioner",
-              description: "Hand-crafted guidance from a nutrition professional.",
-              icon: Icons.health_and_safety_rounded,
-              accent: kSecondary,
-              onTap: () {
-                showDialog<void>(
-                  context: context,
-                  builder: (_) => AlertDialog(
-                    title: const Text("Upgrade plan"),
-                    content: const Text("Nutritionist plans are available with a paid upgrade."),
-                    actions: [
-                      TextButton(
-                        onPressed: () => Navigator.pop(context),
-                        child: const Text("Back"),
-                      ),
-                      FilledButton(
-                        onPressed: () {
-                          Navigator.pop(context);
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(builder: (_) => UpgradePlanPage(data: widget.data)),
-                          );
-                        },
-                        child: const Text("Upgrade plan"),
-                      ),
-                    ],
-                  ),
-                );
-              },
-            ),
-            const SizedBox(height: 16),
-            _OptionCard(
-              title: "Generate diet with yourself (Expert you!)",
-              description: "Use your own expertise and preferences to guide the plan.",
-              icon: Icons.self_improvement_rounded,
-              accent: Colors.deepPurple,
-              isLoading: _isSavingSelf,
-              onTap: _isSavingSelf ? null : () => _saveChoiceAndOpen(context, 'self'),
-            ),
-          ],
+        child: FutureBuilder<SubscriptionSummary?>(
+          future: _subscriptionFuture,
+          builder: (context, snapshot) {
+            final planTier = resolvePlanTier(snapshot.data);
+            final canUseNutritionist = canAccessNutritionist(planTier);
+            return ListView(
+              padding: const EdgeInsets.all(20),
+              children: [
+                const Text(
+                  "How would you like to generate your diet plan?",
+                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  "Pick the experience that fits you best. You can change this later.",
+                  style: TextStyle(color: Colors.grey.shade700, height: 1.4),
+                ),
+                const SizedBox(height: 20),
+                _OptionCard(
+                  title: "Generate diet with AI",
+                  description: "Fast, smart suggestions tailored to your profile.",
+                  icon: Icons.auto_awesome_rounded,
+                  accent: kPrimary,
+                  onTap: () => _saveChoiceAndOpen(context, 'ai'),
+                ),
+                const SizedBox(height: 16),
+                _OptionCard(
+                  title: "Generate diet with Expert Nutritioner",
+                  description: "Hand-crafted guidance from a nutrition professional.",
+                  icon: Icons.health_and_safety_rounded,
+                  accent: kSecondary,
+                  onTap: () {
+                    if (!canUseNutritionist) {
+                      _showUpgradeDialog();
+                      return;
+                    }
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => const NutritionistProfilesPage()),
+                    );
+                  },
+                ),
+                const SizedBox(height: 16),
+                _OptionCard(
+                  title: "Generate diet with yourself (Expert you!)",
+                  description: "Use your own expertise and preferences to guide the plan.",
+                  icon: Icons.self_improvement_rounded,
+                  accent: Colors.deepPurple,
+                  isLoading: _isSavingSelf,
+                  onTap: _isSavingSelf ? null : () => _saveChoiceAndOpen(context, 'self'),
+                ),
+              ],
+            );
+          },
         ),
       ),
     );

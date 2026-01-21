@@ -6,12 +6,15 @@ import '../app.dart';
 import '../models/app_data.dart';
 import '../services/profile_service.dart';
 import '../services/ai_diet_service.dart';
+import '../services/plan_access.dart';
+import '../services/recipe_service.dart';
 import '../services/subscription_models.dart';
 import '../services/subscription_service.dart';
 import '../theme.dart';
 import '../widgets/branding.dart';
 import '../widgets/form_widgets.dart';
 import 'diet_generation_options_page.dart';
+import 'nutritionist_profiles_page.dart';
 import 'upgrade_plan_page.dart';
 import 'user_details_page.dart';
 
@@ -34,6 +37,7 @@ class _DietPlanPageState extends State<DietPlanPage> {
   final Set<String> _generatedRecipes = {};
   final AiDietService _aiDietService = const AiDietService();
   final SubscriptionService _subscriptionService = const SubscriptionService();
+  final RecipeService _recipeService = const RecipeService();
 
   @override
   void initState() {
@@ -54,6 +58,7 @@ class _DietPlanPageState extends State<DietPlanPage> {
       fetchDietGenerationChoice(),
       fetchProfileJobId(),
       fetchUserSubscription(),
+      fetchUserQuotaSummary(),
     ]);
     final plan = results[0] as DietPlanData?;
     if (plan != null) {
@@ -71,6 +76,7 @@ class _DietPlanPageState extends State<DietPlanPage> {
       choice: results[2] as DietGenerationChoice?,
       jobId: results[3] as String?,
       subscription: results[4] as SubscriptionSummary?,
+      quota: results[5] as UserQuotaSummary?,
       upgradeRequest: upgradeRequest,
     );
   }
@@ -81,9 +87,31 @@ class _DietPlanPageState extends State<DietPlanPage> {
     });
   }
 
-  Future<void> _handleAiGeneration(String? jobId) async {
+  Future<void> _handleAiGeneration(
+    String? jobId, {
+    required SubscriptionSummary? subscription,
+    required UserQuotaSummary? quota,
+  }) async {
+    final tier = resolvePlanTier(subscription);
+    if (!canAccessAiRegeneration(tier)) {
+      _showUpgradeDialog(
+        content: "Upgrade your plan to unlock AI diet regeneration.",
+      );
+      return;
+    }
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
+    if (tier == PlanTier.pro || tier == PlanTier.trial) {
+      final limit = quotaForTier(quota, tier)?.dietRegeneration ?? 0;
+      final used = await _aiDietService.countRecentRequests(userId: user.uid);
+      if (used >= limit) {
+        if (!mounted) return;
+        _showUpgradeDialog(
+          content: "You've reached your weekly AI regeneration limit. Upgrade to get more out of it.",
+        );
+        return;
+      }
+    }
     final hadRecent = await _aiDietService.hasRecentRequest(userId: user.uid);
     String? tweaks;
     if (!mounted) return;
@@ -108,6 +136,64 @@ class _DietPlanPageState extends State<DietPlanPage> {
         SnackBar(content: Text("Unable to request AI plan: $error")),
       );
     }
+  }
+
+  Future<void> _handleRecipeGeneration({
+    required String dateKey,
+    required SubscriptionSummary? subscription,
+    required UserQuotaSummary? quota,
+  }) async {
+    final tier = resolvePlanTier(subscription);
+    if (!canAccessRecipes(tier)) {
+      _showUpgradeDialog(
+        content: "Upgrade your plan to unlock recipe generation.",
+      );
+      return;
+    }
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+    if (tier == PlanTier.pro || tier == PlanTier.trial) {
+      final limit = quotaForTier(quota, tier)?.recipe ?? 0;
+      final used = await _recipeService.countRecentRequests(userId: user.uid);
+      if (used >= limit) {
+        if (!mounted) return;
+        _showUpgradeDialog(
+          content: "You've reached your recipe limit. Upgrade to get more out of it.",
+        );
+        return;
+      }
+    }
+    await _recipeService.logRecipeRequest(userId: user.uid, dateKey: dateKey);
+    if (!mounted) return;
+    setState(() {
+      _generatedRecipes.add(dateKey);
+    });
+  }
+
+  void _showUpgradeDialog({required String content}) {
+    showDialog<void>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text("Upgrade plan"),
+        content: Text(content),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text("Back"),
+          ),
+          FilledButton(
+            onPressed: () {
+              Navigator.pop(context);
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => UpgradePlanPage(data: widget.data)),
+              );
+            },
+            child: const Text("Upgrade plan"),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<String?> _showAiTweaksDialog() async {
@@ -540,7 +626,7 @@ class _DietPlanPageState extends State<DietPlanPage> {
                 );
               }
 
-              if (choice.generatedBy == 'expert') {
+              if (choice.generatedBy == 'nutritionist') {
                 return const _DietLoadingState(
                   message: "Expert nutritionist plans are coming soon.",
                 );
@@ -612,11 +698,22 @@ class _DietPlanPageState extends State<DietPlanPage> {
                     ),
                   if (snapshot.data?.subscription != null) const SizedBox(height: 12),
                   _FinalizePlanActions(
-                    onGenerateAi: () => _handleAiGeneration(jobId),
+                    onGenerateAi: () => _handleAiGeneration(
+                      jobId,
+                      subscription: snapshot.data?.subscription,
+                      quota: snapshot.data?.quota,
+                    ),
                     onNutritionist: () {
+                      final tier = resolvePlanTier(snapshot.data?.subscription);
+                      if (!canAccessNutritionist(tier)) {
+                        _showUpgradeDialog(
+                          content: "Nutritionist support is available on the Elite plan.",
+                        );
+                        return;
+                      }
                       Navigator.push(
                         context,
-                        MaterialPageRoute(builder: (_) => UpgradePlanPage(data: widget.data)),
+                        MaterialPageRoute(builder: (_) => const NutritionistProfilesPage()),
                       );
                     },
                   ),
@@ -663,9 +760,11 @@ class _DietPlanPageState extends State<DietPlanPage> {
                         status: status,
                         recipesGenerated: recipesGenerated,
                         onGenerateRecipes: () {
-                          setState(() {
-                            _generatedRecipes.add(dateKey);
-                          });
+                          _handleRecipeGeneration(
+                            dateKey: dateKey,
+                            subscription: snapshot.data?.subscription,
+                            quota: snapshot.data?.quota,
+                          );
                         },
                         onViewRecipes: () {
                           showDialog<void>(
@@ -747,6 +846,7 @@ class _DietPlanBundle {
   final DietGenerationChoice? choice;
   final String? jobId;
   final SubscriptionSummary? subscription;
+  final UserQuotaSummary? quota;
   final SubscriptionUpgradeRequestSummary? upgradeRequest;
 
   const _DietPlanBundle({
@@ -755,6 +855,7 @@ class _DietPlanBundle {
     required this.choice,
     required this.jobId,
     required this.subscription,
+    required this.quota,
     required this.upgradeRequest,
   });
 }
