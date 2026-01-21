@@ -24,7 +24,7 @@ class AppSidebarShell extends StatelessWidget {
   Widget build(BuildContext context) {
     final config = AppThemeConfig.current;
     return Scaffold(
-      appBar: widget.appBar,
+      appBar: appBar,
       drawer: Drawer(
         child: SafeArea(
           child: Column(
@@ -48,10 +48,10 @@ class AppSidebarShell extends StatelessWidget {
               const Divider(height: 24),
               Expanded(
                 child: NavigationRail(
-                  selectedIndex: widget.selectedIndex,
+                  selectedIndex: selectedIndex,
                   onDestinationSelected: (index) {
                     Navigator.pop(context);
-                    widget.onDestinationSelected(index);
+                    onDestinationSelected(index);
                   },
                   extended: true,
                   minExtendedWidth: 220,
@@ -81,19 +81,19 @@ class AppSidebarShell extends StatelessWidget {
                   ],
                 ),
               ),
-              if (widget.onSignOut != null)
+              if (onSignOut != null)
                 Padding(
                   padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
                   child: _SidebarSignOutButton(
                     extended: true,
-                    onTap: widget.onSignOut!,
+                    onTap: onSignOut!,
                   ),
                 ),
             ],
           ),
         ),
       ),
-      body: SafeArea(child: widget.child),
+      body: SafeArea(child: child),
     );
   }
 }
