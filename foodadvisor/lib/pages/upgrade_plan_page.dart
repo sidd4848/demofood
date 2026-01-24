@@ -171,13 +171,12 @@ class UpgradePlanPage extends StatelessWidget {
                           planId: 'pro',
                         );
                         if (selection == null) return;
-                        await service.requestSubscriptionUpgrade(
+                        await _handleUpgradeRequest(
+                          context,
+                          service: service,
                           planId: 'pro',
                           duration: selection.duration,
                           price: selection.price,
-                        );
-                        messenger.showSnackBar(
-                          const SnackBar(content: Text('Upgrade request saved.')),
                         );
                       },
               ),
@@ -216,13 +215,12 @@ class UpgradePlanPage extends StatelessWidget {
                           planId: 'elite',
                         );
                         if (selection == null) return;
-                        await service.requestSubscriptionUpgrade(
+                        await _handleUpgradeRequest(
+                          context,
+                          service: service,
                           planId: 'elite',
                           duration: selection.duration,
                           price: selection.price,
-                        );
-                        messenger.showSnackBar(
-                          const SnackBar(content: Text('Upgrade request saved.')),
                         );
                       },
               ),
@@ -371,6 +369,55 @@ class UpgradePlanPage extends StatelessWidget {
     return diff >= 0 ? diff : 0;
   }
 
+  Future<void> _handleUpgradeRequest(
+    BuildContext context, {
+    required SubscriptionService service,
+    required String planId,
+    required SubscriptionDuration duration,
+    required SubscriptionPrice price,
+  }) async {
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await service.requestSubscriptionUpgrade(
+        planId: planId,
+        duration: duration,
+        price: price,
+      );
+    } catch (error) {
+      if (!context.mounted) return;
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Unable to start payment. Please try again.')),
+      );
+      return;
+    }
+    if (!context.mounted) return;
+    _showPaymentProcessingDialog(context, planId);
+  }
+
+  void _showPaymentProcessingDialog(BuildContext context, String planId) {
+    final planLabel = planId[0].toUpperCase() + planId.substring(1);
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: Text('Verifying $planLabel payment'),
+          content: const Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              CircularProgressIndicator(),
+              SizedBox(height: 16),
+              Text(
+                'We are confirming your payment and activating your subscription. '
+                'Please keep this window open.',
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
   Widget? _buildExtendAction(
     BuildContext context, {
     required SubscriptionService service,
@@ -396,13 +443,15 @@ class UpgradePlanPage extends StatelessWidget {
           discountPct: yearly.discountPct,
           finalPrice: finalPrice,
         );
-        await service.requestSubscriptionUpgrade(
+        await _handleUpgradeRequest(
+          context,
+          service: service,
           planId: planId,
           duration: yearly,
           price: price,
         );
         messenger.showSnackBar(
-          const SnackBar(content: Text('Yearly extension requested.')),
+          const SnackBar(content: Text('Payment verification started.')),
         );
       },
       child: const Text('Extend to yearly'),

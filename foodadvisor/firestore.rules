@@ -58,20 +58,8 @@ service cloud.firestore {
     }
 
     match /subscriptionUpgradeRequests/{requestId} {
-      allow create: if isSignedIn()
-        && request.resource.data.userId == request.auth.uid
-        && request.resource.data.status == 'created';
       allow read: if isSignedIn() && resource.data.userId == request.auth.uid;
       allow update, delete: if false;
-    }
-
-    match /subscriptionRequests/{requestId} {
-      allow read: if isSignedIn() && resource.data.userId == request.auth.uid;
-      allow write: if false;
-    }
-
-    match /subscriptionPayments/{reqId} {
-      allow read, write: if false;
     }
 
     match /aiDietPlans/{planId} {
