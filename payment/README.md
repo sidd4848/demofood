@@ -2,6 +2,17 @@
 
 This folder contains the dummy subscription payment handler (`process_subscription_payment`).
 
+## Prerequisites
+
+* Firebase project on the Blaze (pay-as-you-go) plan (required for 2nd gen functions).
+* The following APIs enabled in Google Cloud:
+  * Cloud Functions
+  * Cloud Build
+  * Artifact Registry
+
+If the Firebase CLI reports missing APIs during deploy, allow it to enable them or
+enable them in the Google Cloud Console before retrying.
+
 ## Deploy to Firebase
 
 1. Install the Firebase CLI and authenticate:
