@@ -2,6 +2,24 @@
 
 A new Flutter project.
 
+## Payment function integration
+
+The app calls the Firebase Cloud Function `process_subscription_payment` when upgrading plans.
+
+### Default behavior
+
+The app resolves the function URL from the Firebase project ID:
+`https://us-central1-<project-id>.cloudfunctions.net/process_subscription_payment`.
+
+### Override the endpoint
+
+If you need a custom endpoint (staging, emulator, or a different region), pass
+`PAYMENT_FUNCTION_URL` at build time:
+
+```bash
+flutter run --dart-define=PAYMENT_FUNCTION_URL=https://your-endpoint/process_subscription_payment
+```
+
 ## Submission payload example
 
 Profile submissions (used for both local saves and API posts) are built from the form

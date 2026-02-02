@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'package:http/http.dart' as http;
 
 import 'subscription_models.dart';
@@ -12,10 +13,23 @@ class SubscriptionService {
   static const configCollection = 'subscriptionConfig';
   static const configDoc = 'default';
   static const upgradeRequestCollection = 'subscriptionUpgradeRequests';
-  static const paymentFunctionUrl = String.fromEnvironment(
+  static const paymentFunctionUrlOverride = String.fromEnvironment(
     'PAYMENT_FUNCTION_URL',
-    defaultValue: 'https://example.com/process_subscription_payment',
+    defaultValue: '',
   );
+
+  String _resolvePaymentFunctionUrl() {
+    if (paymentFunctionUrlOverride.isNotEmpty) {
+      return paymentFunctionUrlOverride;
+    }
+
+    final projectId = Firebase.app().options.projectId;
+    if (projectId == null || projectId.isEmpty) {
+      return 'https://example.com/process_subscription_payment';
+    }
+
+    return 'https://us-central1-$projectId.cloudfunctions.net/process_subscription_payment';
+  }
 
   Future<SubscriptionConfig> fetchConfig() async {
     final snapshot = await FirebaseFirestore.instance.collection(configCollection).doc(configDoc).get();
@@ -34,7 +48,7 @@ class SubscriptionService {
     }
     final token = await user.getIdToken();
     final response = await http.post(
-      Uri.parse(paymentFunctionUrl),
+      Uri.parse(_resolvePaymentFunctionUrl()),
       headers: {
         'Content-Type': 'application/json',
         'Authorization': 'Bearer $token',
