@@ -1,6 +1,7 @@
 {
   "functions": {
     "source": "payment",
-    "runtime": "python311"
+    "runtime": "python311",
+    "entryPoint": "process_subscription_payment"
   }
 }
