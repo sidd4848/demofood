@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/foundation.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
 import '../models/app_data.dart';
@@ -10,30 +11,47 @@ class AiDietService {
 
   Future<int> countRecentRequests({required String userId, Duration window = const Duration(days: 7)}) async {
     final since = DateTime.now().subtract(window);
-    final snapshot = await FirebaseFirestore.instance
-        .collection(collectionName)
-        .where('userId', isEqualTo: userId)
-        .get();
-    return snapshot.docs.where((doc) {
-      final createdAt = doc.data()['createdAt'];
-      return createdAt is Timestamp && !createdAt.toDate().isBefore(since);
-    }).length;
+    try {
+      final snapshot = await FirebaseFirestore.instance
+          .collection(collectionName)
+          .where('userId', isEqualTo: userId)
+          .limit(100)
+          .get();
+      return snapshot.docs.where((doc) {
+        final createdAt = doc.data()['createdAt'];
+        return createdAt is Timestamp && !createdAt.toDate().isBefore(since);
+      }).length;
+    } on FirebaseException catch (error) {
+      if (error.code == 'failed-precondition') {
+        debugPrint('Missing Firestore index for aiDietPlans quota check: ${error.message}');
+        return 0;
+      }
+      rethrow;
+    }
   }
 
   Future<bool> hasRecentRequest({required String userId}) async {
     final since = DateTime.now().subtract(const Duration(days: 7));
-    final snapshot = await FirebaseFirestore.instance
-        .collection(collectionName)
-        .where('userId', isEqualTo: userId)
-        .limit(20)
-        .get();
-    for (final doc in snapshot.docs) {
-      final createdAt = doc.data()['createdAt'];
-      if (createdAt is Timestamp && createdAt.toDate().isAfter(since)) {
-        return true;
+    try {
+      final snapshot = await FirebaseFirestore.instance
+          .collection(collectionName)
+          .where('userId', isEqualTo: userId)
+          .limit(20)
+          .get();
+      for (final doc in snapshot.docs) {
+        final createdAt = doc.data()['createdAt'];
+        if (createdAt is Timestamp && createdAt.toDate().isAfter(since)) {
+          return true;
+        }
       }
+      return false;
+    } on FirebaseException catch (error) {
+      if (error.code == 'failed-precondition') {
+        debugPrint('Missing Firestore index for aiDietPlans recent-check: ${error.message}');
+        return false;
+      }
+      rethrow;
     }
-    return false;
   }
 
   Future<DocumentReference<Map<String, dynamic>>> requestPlan({

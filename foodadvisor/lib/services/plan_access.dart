@@ -13,7 +13,6 @@ PlanTier resolvePlanTier(SubscriptionSummary? summary) {
       (summary.currentPeriodEnd == null || summary.currentPeriodEnd!.isAfter(now));
   if (plan == 'elite' && isPaidActive) return PlanTier.elite;
   if (plan == 'pro' && isPaidActive) return PlanTier.pro;
-  if (plan == 'free' && status == 'trial') return PlanTier.trial;
   return PlanTier.free;
 }
 
