@@ -18,13 +18,16 @@ class SubscriptionService {
   );
 
   static const _defaultPaymentFunctionUrl =
-      'https://process-subscription-payment-b2g4omif7q-uc.a.run.app';
+      'https://process-subscription-payment-b2g4omif7q-uc.a.run.app/';
 
   String _resolvePaymentFunctionUrl() {
-    if (paymentFunctionUrlOverride.isNotEmpty) {
-      return paymentFunctionUrlOverride;
+    final rawUrl = paymentFunctionUrlOverride.isNotEmpty
+        ? paymentFunctionUrlOverride
+        : _defaultPaymentFunctionUrl;
+    if (rawUrl.endsWith('/')) {
+      return rawUrl;
     }
-    return _defaultPaymentFunctionUrl;
+    return '$rawUrl/';
   }
 
   Future<SubscriptionConfig> fetchConfig() async {
@@ -51,17 +54,19 @@ class SubscriptionService {
         'Authorization': 'Bearer $token',
       },
       body: jsonEncode(<String, dynamic>{
-        'basePrice': price.basePrice,
-        'createdAt': DateTime.now().toUtc().toIso8601String(),
-        'currency': price.currency,
-        'discountPct': price.discountPct,
-        'duration': duration.id,
-        'durationMonths': duration.months,
-        'finalPrice': price.finalPrice,
-        'planId': planId,
-        'region': price.region,
-        'status': 'created',
-        'userId': user.uid,
+        'data': <String, dynamic>{
+          'basePrice': price.basePrice,
+          'createdAt': DateTime.now().toUtc().toIso8601String(),
+          'currency': price.currency,
+          'discountPct': price.discountPct,
+          'duration': duration.id,
+          'durationMonths': duration.months,
+          'finalPrice': price.finalPrice,
+          'planId': planId,
+          'region': price.region,
+          'status': 'created',
+          'userId': user.uid,
+        },
       }),
     );
 

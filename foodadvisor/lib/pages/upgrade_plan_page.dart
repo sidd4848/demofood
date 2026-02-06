@@ -386,7 +386,7 @@ class UpgradePlanPage extends StatelessWidget {
     } catch (error) {
       if (!context.mounted) return;
       messenger.showSnackBar(
-        const SnackBar(content: Text('Unable to start payment. Please try again.')),
+        SnackBar(content: Text('Unable to start payment: $error')),
       );
       return;
     }
