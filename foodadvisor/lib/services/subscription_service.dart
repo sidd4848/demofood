@@ -18,13 +18,16 @@ class SubscriptionService {
   );
 
   static const _defaultPaymentFunctionUrl =
-      'https://process-subscription-payment-b2g4omif7q-uc.a.run.app';
+      'https://process-subscription-payment-b2g4omif7q-uc.a.run.app/';
 
   String _resolvePaymentFunctionUrl() {
-    if (paymentFunctionUrlOverride.isNotEmpty) {
-      return paymentFunctionUrlOverride;
+    final rawUrl = paymentFunctionUrlOverride.isNotEmpty
+        ? paymentFunctionUrlOverride
+        : _defaultPaymentFunctionUrl;
+    if (rawUrl.endsWith('/')) {
+      return rawUrl;
     }
-    return _defaultPaymentFunctionUrl;
+    return '$rawUrl/';
   }
 
   Future<SubscriptionConfig> fetchConfig() async {

@@ -13,9 +13,11 @@ class AiDietService {
     final snapshot = await FirebaseFirestore.instance
         .collection(collectionName)
         .where('userId', isEqualTo: userId)
-        .where('createdAt', isGreaterThanOrEqualTo: Timestamp.fromDate(since))
         .get();
-    return snapshot.docs.length;
+    return snapshot.docs.where((doc) {
+      final createdAt = doc.data()['createdAt'];
+      return createdAt is Timestamp && !createdAt.toDate().isBefore(since);
+    }).length;
   }
 
   Future<bool> hasRecentRequest({required String userId}) async {
@@ -23,16 +25,13 @@ class AiDietService {
     final snapshot = await FirebaseFirestore.instance
         .collection(collectionName)
         .where('userId', isEqualTo: userId)
-        .orderBy('createdAt', descending: true)
-        .limit(1)
+        .limit(20)
         .get();
-    if (snapshot.docs.isEmpty) {
-      return false;
-    }
-    final data = snapshot.docs.first.data();
-    final createdAt = data['createdAt'];
-    if (createdAt is Timestamp) {
-      return createdAt.toDate().isAfter(since);
+    for (final doc in snapshot.docs) {
+      final createdAt = doc.data()['createdAt'];
+      if (createdAt is Timestamp && createdAt.toDate().isAfter(since)) {
+        return true;
+      }
     }
     return false;
   }

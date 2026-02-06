@@ -10,9 +10,11 @@ class RecipeService {
     final snapshot = await FirebaseFirestore.instance
         .collection(collectionName)
         .where('userId', isEqualTo: userId)
-        .where('createdAt', isGreaterThanOrEqualTo: Timestamp.fromDate(since))
         .get();
-    return snapshot.docs.length;
+    return snapshot.docs.where((doc) {
+      final createdAt = doc.data()['createdAt'];
+      return createdAt is Timestamp && !createdAt.toDate().isBefore(since);
+    }).length;
   }
 
   Future<void> logRecipeRequest({
