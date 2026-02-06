@@ -2,7 +2,6 @@ import 'dart:convert';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:firebase_core/firebase_core.dart';
 import 'package:http/http.dart' as http;
 
 import 'subscription_models.dart';
@@ -18,17 +17,14 @@ class SubscriptionService {
     defaultValue: '',
   );
 
+  static const _defaultPaymentFunctionUrl =
+      'https://process-subscription-payment-b2g4omif7q-uc.a.run.app';
+
   String _resolvePaymentFunctionUrl() {
     if (paymentFunctionUrlOverride.isNotEmpty) {
       return paymentFunctionUrlOverride;
     }
-
-    final projectId = Firebase.app().options.projectId;
-    if (projectId == null || projectId.isEmpty) {
-      return 'https://example.com/process_subscription_payment';
-    }
-
-    return 'https://us-central1-$projectId.cloudfunctions.net/process_subscription_payment';
+    return _defaultPaymentFunctionUrl;
   }
 
   Future<SubscriptionConfig> fetchConfig() async {
@@ -46,6 +42,7 @@ class SubscriptionService {
     if (user == null) {
       throw StateError('No authenticated user.');
     }
+
     final token = await user.getIdToken();
     final response = await http.post(
       Uri.parse(_resolvePaymentFunctionUrl()),
@@ -53,20 +50,27 @@ class SubscriptionService {
         'Content-Type': 'application/json',
         'Authorization': 'Bearer $token',
       },
-      body: jsonEncode({
-        'userId': user.uid,
-        'planId': planId,
-        'duration': duration.id,
-        'durationMonths': duration.months,
-        'currency': price.currency,
-        'region': price.region,
-        'basePrice': price.basePrice,
-        'discountPct': price.discountPct,
-        'finalPrice': price.finalPrice,
+      body: jsonEncode(<String, dynamic>{
+        'data': <String, dynamic>{
+          'basePrice': price.basePrice,
+          'createdAt': DateTime.now().toUtc().toIso8601String(),
+          'currency': price.currency,
+          'discountPct': price.discountPct,
+          'duration': duration.id,
+          'durationMonths': duration.months,
+          'finalPrice': price.finalPrice,
+          'planId': planId,
+          'region': price.region,
+          'status': 'created',
+          'userId': user.uid,
+        },
       }),
     );
-    if (response.statusCode != 200) {
-      throw StateError('Payment request failed (${response.statusCode}).');
+
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw StateError(
+        'Payment request failed (${response.statusCode}): ${response.body}',
+      );
     }
   }
 
