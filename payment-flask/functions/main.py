@@ -1,89 +1,19 @@
 import datetime
+import json
+from typing import Any, Dict, Optional
 import logging
-import os
-from typing import Any, Dict
 
 # [START v2imports]
 # Dependencies for callable functions.
 from firebase_functions import https_fn, options
 
 # Dependencies for writing to Realtime Database.
-from firebase_admin import db, auth, credentials, firestore, initialize_app
+from firebase_admin import auth, credentials, firestore, initialize_app
 
-DATABASE_URL = os.getenv("FIREBASE_DATABASE_URL", "").strip()
-if DATABASE_URL:
-    initialize_app(options={"databaseURL": DATABASE_URL})
-else:
-    initialize_app()
+initialize_app()
 
-
-def _write_rtdb(path: str, value: Dict[str, Any], child_key: str | None = None) -> None:
-    if not DATABASE_URL:
-        logging.warning("Skipping RTDB write to %s because FIREBASE_DATABASE_URL is not configured.", path)
-        return
-
-    ref = db.reference(path)
-    if child_key:
-        ref = ref.child(child_key)
-    if child_key:
-        ref.update(value)
-    else:
-        ref.push(value)
-
-
-
-def _extract_uid(req: https_fn.CallableRequest) -> str | None:
-    auth_data = req.auth
-    if not auth_data:
-        return None
-
-    # Callable auth context in Python functions SDK exposes `uid` as an
-    # attribute (AuthData), but support dictionary payloads as a defensive
-    # fallback for local tests/tooling.
-    uid = getattr(auth_data, "uid", None)
-    if uid:
-        return str(uid)
-
-    if isinstance(auth_data, dict):
-        value = auth_data.get("uid")
-        return str(value) if value else None
-
-    return None
-
-
-def _resolve_payload(req: https_fn.CallableRequest) -> Dict[str, Any]:
-    payload = req.data if isinstance(req.data, dict) else {}
-    nested = payload.get("data")
-    if isinstance(nested, dict):
-        return nested
-    return payload
-
-
-def _extract_uid(req: https_fn.CallableRequest) -> str | None:
-    auth_data = req.auth
-    if not auth_data:
-        return None
-
-    # Callable auth context in Python functions SDK exposes `uid` as an
-    # attribute (AuthData), but support dictionary payloads as a defensive
-    # fallback for local tests/tooling.
-    uid = getattr(auth_data, "uid", None)
-    if uid:
-        return str(uid)
-
-    if isinstance(auth_data, dict):
-        value = auth_data.get("uid")
-        return str(value) if value else None
-
-    return None
-
-
-def _resolve_payload(req: https_fn.CallableRequest) -> Dict[str, Any]:
-    payload = req.data if isinstance(req.data, dict) else {}
-    nested = payload.get("data")
-    if isinstance(nested, dict):
-        return nested
-    return payload
+# Get a Firestore client instance
+db = firestore.client()
 
 def _plan_quota(plan_id: str) -> Dict[str, Dict[str, int]]:
     if plan_id == "elite":
@@ -113,59 +43,49 @@ def process_subscription_payment(req: https_fn.CallableRequest) -> Any:
     #     payload,
     #     request.headers.get("Authorization"),
     # )
-    user_id = _extract_uid(req)
+    user_id = req.auth.get("uid") if req.auth else None
     if not user_id:
-        raise https_fn.HttpsError(
-            code=https_fn.FunctionsErrorCode.UNAUTHENTICATED,
-            message="Unauthorized",
-        )
+        return {"error": "Unauthorized"}, 401
+    else:
+        logging.info(f"Processing subscription payment for user ID: {user_id}")
 
-    payload = _resolve_payload(req)
-
-    plan_id = str(payload.get("planId", "")).lower()
-    duration_id = str(payload.get("duration", ""))
-    duration_months = int(payload.get("durationMonths", 1))
+    plan_id = str(req.data.get("planId", "")).lower()
+    duration_id = str(req.data.get("duration", ""))
+    duration_months = int(req.data.get("durationMonths", 1))
     if plan_id not in {"pro", "elite"}:
-        raise https_fn.HttpsError(
-            code=https_fn.FunctionsErrorCode.INVALID_ARGUMENT,
-            message="Unsupported plan",
-        )
-
-    request_data = {
-        "basePrice": payload.get("basePrice"),
-        "createdAt": payload.get("createdAt"),
-        "discountPct": payload.get("discountPct"),
+        return ("Unsupported plan", 400)
+    
+    # Reference to a collection
+    collection_ref = db.collection("subscriptionUpgradeRequests")
+    add_result = collection_ref.add({
+        "baseprice": req.data.get("basePrice"),
+        "createdAt": req.data.get("createdAt"),
+        "discountPct": req.data.get("discountPct"),
         "duration": duration_id,
-        "durationMonths": duration_months,
-        "finalPrice": payload.get("finalPrice"),
+        "finalPrice": req.data.get("finalPrice"),
         "planId": plan_id,
-        "region": payload.get("region"),
-        "reqId": payload.get("reqId"),
+        "region": req.data.get("region"),
+        "reqId": req.data.get("reqId"),
         "status": "payment_done",
         "userId": user_id,
-    }
+    })
+    new_doc_id = add_result[1].id
+    logging.info(f"New subscription upgrade request added with ID: {new_doc_id}")
 
-    _write_rtdb("subscriptionUpgradeRequests", request_data)
-    firestore.client().collection("subscriptionUpgradeRequests").add(request_data)
 
-    _write_rtdb(
-        "users",
-        {
-            "plan": plan_id,
-            "subcriptionId": payload.get("reqId"),
-            "subscriptionStatus": "active",
-            "subscriptionStart": payload.get("createdAt"),
-            "updatedAt": datetime.datetime.utcnow().isoformat(),
-        },
-        child_key=user_id,
-    )
-
-    response = {
+    doc_to_update = user_id
+    doc_ref = db.collection("users").document(doc_to_update)
+    doc_ref.set({
         "plan": plan_id,
-        "subcriptionId": payload.get("reqId"),
+        "subcriptionId": req.data.get("reqId"),
         "subscriptionStatus": "active",
-        "subscriptionStart": payload.get("createdAt"),
+        "subscriptionStart": req.data.get("createdAt"),
         "updatedAt": datetime.datetime.utcnow().isoformat(),
-    }
+        "currentPeriodEnd": _add_months(datetime.datetime.fromisoformat(req.data.get("createdAt")), duration_months).isoformat()
+    }, merge=True)
 
-    return response
+    return https_fn.Response(
+            f"Successfully added document with ID: {new_doc_id} "
+            f"and updated it. Check your 'users' collection in Firestore.",
+            status=200
+        )
