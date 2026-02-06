@@ -58,6 +58,33 @@ def _resolve_payload(req: https_fn.CallableRequest) -> Dict[str, Any]:
         return nested
     return payload
 
+
+def _extract_uid(req: https_fn.CallableRequest) -> str | None:
+    auth_data = req.auth
+    if not auth_data:
+        return None
+
+    # Callable auth context in Python functions SDK exposes `uid` as an
+    # attribute (AuthData), but support dictionary payloads as a defensive
+    # fallback for local tests/tooling.
+    uid = getattr(auth_data, "uid", None)
+    if uid:
+        return str(uid)
+
+    if isinstance(auth_data, dict):
+        value = auth_data.get("uid")
+        return str(value) if value else None
+
+    return None
+
+
+def _resolve_payload(req: https_fn.CallableRequest) -> Dict[str, Any]:
+    payload = req.data if isinstance(req.data, dict) else {}
+    nested = payload.get("data")
+    if isinstance(nested, dict):
+        return nested
+    return payload
+
 def _plan_quota(plan_id: str) -> Dict[str, Dict[str, int]]:
     if plan_id == "elite":
         return {
