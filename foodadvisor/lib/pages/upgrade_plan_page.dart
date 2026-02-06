@@ -391,30 +391,9 @@ class UpgradePlanPage extends StatelessWidget {
       return;
     }
     if (!context.mounted) return;
-    _showPaymentProcessingDialog(context, planId);
-  }
-
-  void _showPaymentProcessingDialog(BuildContext context, String planId) {
     final planLabel = planId[0].toUpperCase() + planId.substring(1);
-    showDialog<void>(
-      context: context,
-      barrierDismissible: false,
-      builder: (dialogContext) {
-        return AlertDialog(
-          title: Text('Verifying $planLabel payment'),
-          content: const Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              CircularProgressIndicator(),
-              SizedBox(height: 16),
-              Text(
-                'We are confirming your payment and activating your subscription. '
-                'Please keep this window open.',
-              ),
-            ],
-          ),
-        );
-      },
+    messenger.showSnackBar(
+      SnackBar(content: Text('$planLabel payment verified and subscription activated.')),
     );
   }
 
@@ -449,9 +428,6 @@ class UpgradePlanPage extends StatelessWidget {
           planId: planId,
           duration: yearly,
           price: price,
-        );
-        messenger.showSnackBar(
-          const SnackBar(content: Text('Payment verification started.')),
         );
       },
       child: const Text('Extend to yearly'),

@@ -968,6 +968,7 @@ class _SubscriptionStatusBanner extends StatelessWidget {
           color: Colors.orange,
         );
       case 'paid':
+      case 'payment_done':
         return const _BannerState(
           message: 'Payment received. Activating subscription…',
           icon: Icons.check_circle_outline,
