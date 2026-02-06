@@ -53,11 +53,10 @@ class _DietPlanPageState extends State<DietPlanPage> {
   }
 
   Future<_DietPlanBundle> _fetchBundle() async {
-    final choice = await fetchDietGenerationChoice();
-    final generatedBy = choice?.generatedBy;
     final results = await Future.wait([
-      fetchDietPlan(generatedBy: generatedBy),
+      fetchDietPlan(),
       fetchUserProfileSummary(),
+      fetchDietGenerationChoice(),
       fetchProfileJobId(),
       fetchUserSubscription(),
       fetchUserQuotaSummary(),
@@ -75,10 +74,10 @@ class _DietPlanPageState extends State<DietPlanPage> {
     return _DietPlanBundle(
       plan: resolvedPlan,
       profile: results[1] as UserProfileSummary?,
-      choice: choice,
-      jobId: results[2] as String?,
-      subscription: results[3] as SubscriptionSummary?,
-      quota: results[4] as UserQuotaSummary?,
+      choice: results[2] as DietGenerationChoice?,
+      jobId: results[3] as String?,
+      subscription: results[4] as SubscriptionSummary?,
+      quota: results[5] as UserQuotaSummary?,
       upgradeRequest: upgradeRequest,
     );
   }

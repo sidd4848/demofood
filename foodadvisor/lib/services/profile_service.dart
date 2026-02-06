@@ -185,7 +185,7 @@ Future<UserQuotaSummary?> fetchUserQuotaSummary() async {
   );
 }
 
-Future<DietPlanData?> fetchDietPlan({String? generatedBy}) async {
+Future<DietPlanData?> fetchDietPlan() async {
   final user = FirebaseAuth.instance.currentUser;
   if (user == null) return null;
   String? jobId;
@@ -204,23 +204,16 @@ Future<DietPlanData?> fetchDietPlan({String? generatedBy}) async {
     if (jobId != null && jobId.isNotEmpty) {
       final dietSnapshot = await FirebaseFirestore.instance.collection('diet').doc(jobId).get();
       if (dietSnapshot.exists) {
-        final candidate = dietSnapshot.data();
-        final source = candidate?['generatedBy']?.toString().toLowerCase();
-        final expects = generatedBy?.toLowerCase();
-        if (expects == null || expects.isEmpty || source == expects) {
-          dietData = candidate;
-          jobId = dietData?['jobId'] as String? ?? jobId;
-        }
+        dietData = dietSnapshot.data();
+        jobId = dietData?['jobId'] as String? ?? jobId;
       }
-    }
-    if (dietData == null) {
-      Query<Map<String, dynamic>> query = FirebaseFirestore.instance
+    } else {
+      final dietSnapshot = await FirebaseFirestore.instance
           .collection('diet')
-          .where('userId', isEqualTo: user.uid);
-      if (generatedBy != null && generatedBy.isNotEmpty) {
-        query = query.where('generatedBy', isEqualTo: generatedBy);
-      }
-      final dietSnapshot = await query.orderBy('updatedAt', descending: true).limit(1).get();
+          .where('userId', isEqualTo: user.uid)
+          .orderBy('updatedAt', descending: true)
+          .limit(1)
+          .get();
       if (dietSnapshot.docs.isEmpty) return null;
       final doc = dietSnapshot.docs.first;
       dietData = doc.data();
