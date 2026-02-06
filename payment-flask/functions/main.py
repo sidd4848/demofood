@@ -12,9 +12,6 @@ from firebase_admin import auth, credentials, firestore, initialize_app
 
 initialize_app()
 
-# Get a Firestore client instance
-db = firestore.client()
-
 def _plan_quota(plan_id: str) -> Dict[str, Dict[str, int]]:
     if plan_id == "elite":
         return {
@@ -56,6 +53,8 @@ def process_subscription_payment(req: https_fn.CallableRequest) -> Any:
         return ("Unsupported plan", 400)
     
     # Reference to a collection
+    # Get a Firestore client instance
+    db = firestore.client()
     collection_ref = db.collection("subscriptionUpgradeRequests")
     add_result = collection_ref.add({
         "baseprice": req.data.get("basePrice"),
