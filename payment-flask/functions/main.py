@@ -1,5 +1,6 @@
 import datetime
 from typing import Any, Dict
+import logging
 
 # [START v2imports]
 # Dependencies for callable functions.
@@ -71,6 +72,8 @@ def process_subscription_payment(req: https_fn.CallableRequest) -> Any:
             code=https_fn.FunctionsErrorCode.UNAUTHENTICATED,
             message="Unauthorized",
         )
+    else:
+        logging.info(f"Processing subscription payment for user: {user_id}")
 
     payload = _resolve_payload(req)
 
