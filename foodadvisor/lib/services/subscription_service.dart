@@ -81,7 +81,14 @@ class SubscriptionService {
       throw const FormatException('Payment response has an unexpected format.');
     }
 
-    final message = decoded['message']?.toString();
+    Map<String, dynamic>? payload;
+    if (decoded['result'] is Map<String, dynamic>) {
+      payload = decoded['result'] as Map<String, dynamic>;
+    } else {
+      payload = decoded;
+    }
+
+    final message = payload['message']?.toString();
     if (message == null || message.isEmpty) {
       throw const FormatException('Payment response did not include a success message.');
     }
