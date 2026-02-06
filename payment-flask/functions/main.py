@@ -40,6 +40,7 @@ def process_subscription_payment(req: https_fn.CallableRequest) -> Any:
     #     payload,
     #     request.headers.get("Authorization"),
     # )
+    logging.info("Received subscription payment request.", extra={"request_data": req})
     user_id = req.auth.uid  if req.auth else None
     if not user_id:
         raise https_fn.HttpsError(
@@ -86,8 +87,7 @@ def process_subscription_payment(req: https_fn.CallableRequest) -> Any:
         "currentPeriodEnd": _add_months(datetime.datetime.fromisoformat(req.data.get("createdAt")), duration_months).isoformat()
     }, merge=True)
 
-    return https_fn.Response(
-            f"Successfully added document with ID: {new_doc_id} "
-            f"and updated it. Check your 'users' collection in Firestore.",
-            status=200
-        )
+    return {
+        "message": f"Successfully processed subscription for user: {user_id}",
+        "newDocId": new_doc_id
+    }
