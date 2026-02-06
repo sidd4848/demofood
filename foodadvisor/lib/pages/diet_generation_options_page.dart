@@ -161,12 +161,34 @@ class _DietGenerationOptionsPageState extends State<DietGenerationOptionsPage> {
       child: FutureBuilder<_AccessSnapshot>(
         future: _accessFuture,
         builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(child: CircularProgressIndicator());
+          }
+          if (snapshot.hasError) {
+            return Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text('Unable to load plan access right now.'),
+                  const SizedBox(height: 12),
+                  FilledButton(
+                    onPressed: () {
+                      setState(() {
+                        _accessFuture = _loadAccess();
+                      });
+                    },
+                    child: const Text('Retry'),
+                  ),
+                ],
+              ),
+            );
+          }
           final access = snapshot.data;
           final planTier = resolvePlanTier(access?.subscription);
           final canUseNutritionist = canAccessNutritionist(planTier);
-          final aiQuota = quotaForTier(access?.quota, planTier)?.dietRegeneration ?? 0;
           final canUseAi = planTier == PlanTier.elite ||
-              ((planTier == PlanTier.pro || planTier == PlanTier.trial) && aiQuota > 0);
+              planTier == PlanTier.pro ||
+              planTier == PlanTier.trial;
           return ListView(
             padding: const EdgeInsets.all(24),
             children: [

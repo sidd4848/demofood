@@ -156,9 +156,16 @@ Future<SubscriptionSummary?> fetchUserSubscription() async {
   if (!snapshot.exists) return null;
   final data = snapshot.data();
   if (data == null) return null;
-  final plan = data['plan']?.toString() ?? 'free';
-  final status = data['subscriptionStatus']?.toString() ?? 'trial';
-  final subscriptionId = data['subscriptionId']?.toString();
+  final plan =
+      data['plan']?.toString() ?? data['planId']?.toString() ?? 'free';
+  final rawStatus =
+      data['subscriptionStatus']?.toString() ?? data['status']?.toString() ?? 'trial';
+  final status = switch (rawStatus.toLowerCase()) {
+    'payment_done' || 'paid' => 'active',
+    _ => rawStatus,
+  };
+  final subscriptionId =
+      data['subscriptionId']?.toString() ?? data['reqId']?.toString();
   final currentPeriodEnd = _parseFirestoreTimestamp(data['currentPeriodEnd']);
   return SubscriptionSummary(
     plan: plan,
