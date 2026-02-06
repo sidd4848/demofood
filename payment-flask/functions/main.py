@@ -1,6 +1,5 @@
 import datetime
-import json
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 
 # [START v2imports]
 # Dependencies for callable functions.
@@ -10,6 +9,33 @@ from firebase_functions import https_fn, options
 from firebase_admin import db, auth, credentials, firestore, initialize_app
 
 initialize_app()
+
+
+def _extract_uid(req: https_fn.CallableRequest) -> str | None:
+    auth_data = req.auth
+    if not auth_data:
+        return None
+
+    # Callable auth context in Python functions SDK exposes `uid` as an
+    # attribute (AuthData), but support dictionary payloads as a defensive
+    # fallback for local tests/tooling.
+    uid = getattr(auth_data, "uid", None)
+    if uid:
+        return str(uid)
+
+    if isinstance(auth_data, dict):
+        value = auth_data.get("uid")
+        return str(value) if value else None
+
+    return None
+
+
+def _resolve_payload(req: https_fn.CallableRequest) -> Dict[str, Any]:
+    payload = req.data if isinstance(req.data, dict) else {}
+    nested = payload.get("data")
+    if isinstance(nested, dict):
+        return nested
+    return payload
 
 def _plan_quota(plan_id: str) -> Dict[str, Dict[str, int]]:
     if plan_id == "elite":
@@ -39,47 +65,55 @@ def process_subscription_payment(req: https_fn.CallableRequest) -> Any:
     #     payload,
     #     request.headers.get("Authorization"),
     # )
-    user_id = req.auth.get("uid") if req.auth else None
+    user_id = _extract_uid(req)
     if not user_id:
-        return {"error": "Unauthorized"}, 401
+        raise https_fn.HttpsError(
+            code=https_fn.FunctionsErrorCode.UNAUTHENTICATED,
+            message="Unauthorized",
+        )
 
-    plan_id = str(req.data.get("planId", "")).lower()
-    duration_id = str(req.data.get("duration", ""))
-    duration_months = int(req.data.get("durationMonths", 1))
+    payload = _resolve_payload(req)
+
+    plan_id = str(payload.get("planId", "")).lower()
+    duration_id = str(payload.get("duration", ""))
+    duration_months = int(payload.get("durationMonths", 1))
     if plan_id not in {"pro", "elite"}:
-        return ("Unsupported plan", 400)
+        raise https_fn.HttpsError(
+            code=https_fn.FunctionsErrorCode.INVALID_ARGUMENT,
+            message="Unsupported plan",
+        )
 
-    db.reference("subscriptionUpgradeRequests").push({
-        "baseprice": req.data.get("basePrice"),
-        "createdAt": req.data.get("createdAt"),
-        "discountPct": req.data.get("discountPct"),
+    request_data = {
+        "basePrice": payload.get("basePrice"),
+        "createdAt": payload.get("createdAt"),
+        "discountPct": payload.get("discountPct"),
         "duration": duration_id,
-        "finalPrice": req.data.get("finalPrice"),
+        "durationMonths": duration_months,
+        "finalPrice": payload.get("finalPrice"),
         "planId": plan_id,
-        "region": req.data.get("region"),
-        "reqId": req.data.get("reqId"),
+        "region": payload.get("region"),
+        "reqId": payload.get("reqId"),
         "status": "payment_done",
         "userId": user_id,
-    })
+    }
+
+    db.reference("subscriptionUpgradeRequests").push(request_data)
+    firestore.client().collection("subscriptionUpgradeRequests").add(request_data)
 
     db.reference("users").child(user_id).update({
         "plan": plan_id,
-        "subcriptionId": req.data.get("reqId"),
+        "subcriptionId": payload.get("reqId"),
         "subscriptionStatus": "active",
-        "subscriptionStart": req.data.get("createdAt"),
+        "subscriptionStart": payload.get("createdAt"),
         "updatedAt": datetime.datetime.utcnow().isoformat(),
     })
 
     response = {
         "plan": plan_id,
-        "subcriptionId": req.data.get("reqId"),
+        "subcriptionId": payload.get("reqId"),
         "subscriptionStatus": "active",
-        "subscriptionStart": req.data.get("createdAt"),
+        "subscriptionStart": payload.get("createdAt"),
         "updatedAt": datetime.datetime.utcnow().isoformat(),
     }
 
-    return (
-        json.dumps(response),
-        200,
-        {"Content-Type": "application/json"},
-    )
+    return response
