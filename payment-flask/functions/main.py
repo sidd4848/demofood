@@ -40,9 +40,12 @@ def process_subscription_payment(req: https_fn.CallableRequest) -> Any:
     #     payload,
     #     request.headers.get("Authorization"),
     # )
-    user_id = req.auth.get("uid") if req.auth else None
+    user_id = req.auth.uid  if req.auth else None
     if not user_id:
-        return {"error": "Unauthorized"}, 401
+        raise https_fn.HttpsError(
+            code=https_fn.FunctionsErrorCode.UNAUTHENTICATED,
+            message="Unauthorized: User ID not found."
+        )
     else:
         logging.info(f"Processing subscription payment for user ID: {user_id}")
 
