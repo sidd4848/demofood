@@ -80,7 +80,7 @@ def process_subscription_payment(req: https_fn.CallableRequest) -> Any:
     doc_ref = db.collection("users").document(doc_to_update)
     doc_ref.set({
         "plan": plan_id,
-        "subcriptionId": req.data.get("reqId"),
+        "subscriptionId": req.data.get("reqId"),
         "subscriptionStatus": "active",
         "subscriptionStart": req.data.get("createdAt"),
         "updatedAt": datetime.datetime.utcnow().isoformat(),

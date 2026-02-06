@@ -75,6 +75,16 @@ class SubscriptionService {
         'Payment request failed (${response.statusCode}): ${response.body}',
       );
     }
+
+    final decoded = jsonDecode(response.body);
+    if (decoded is! Map<String, dynamic>) {
+      throw const FormatException('Payment response has an unexpected format.');
+    }
+
+    final message = decoded['message']?.toString();
+    if (message == null || message.isEmpty) {
+      throw const FormatException('Payment response did not include a success message.');
+    }
   }
 
   Future<SubscriptionUpgradeRequestSummary?> fetchLatestUpgradeRequest({required String userId}) async {
