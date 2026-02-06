@@ -1,20 +1,25 @@
 import datetime
 import logging
+import os
 from typing import Any, Dict
 
 # [START v2imports]
 # Dependencies for callable functions.
-from firebase_functions import https_fn
+from firebase_functions import https_fn, options
 
 # Dependencies for writing to Realtime Database.
-from firebase_admin import db, firestore, initialize_app
+from firebase_admin import db, auth, credentials, firestore, initialize_app
 
-DATABASE_URL = "https://foodadvisor-e2cd0-default-rtdb.firebaseio.com"
-initialize_app(options={"databaseURL": DATABASE_URL})
+DATABASE_URL = os.getenv("FIREBASE_DATABASE_URL", "").strip()
+if DATABASE_URL:
+    initialize_app(options={"databaseURL": DATABASE_URL})
+else:
+    initialize_app()
+
 
 def _write_rtdb(path: str, value: Dict[str, Any], child_key: str | None = None) -> None:
     if not DATABASE_URL:
-        logging.warning("Skipping RTDB write to %s because the hardcoded DATABASE_URL is empty or invalid.", path)
+        logging.warning("Skipping RTDB write to %s because FIREBASE_DATABASE_URL is not configured.", path)
         return
 
     ref = db.reference(path)
@@ -25,6 +30,33 @@ def _write_rtdb(path: str, value: Dict[str, Any], child_key: str | None = None) 
     else:
         ref.push(value)
 
+
+
+def _extract_uid(req: https_fn.CallableRequest) -> str | None:
+    auth_data = req.auth
+    if not auth_data:
+        return None
+
+    # Callable auth context in Python functions SDK exposes `uid` as an
+    # attribute (AuthData), but support dictionary payloads as a defensive
+    # fallback for local tests/tooling.
+    uid = getattr(auth_data, "uid", None)
+    if uid:
+        return str(uid)
+
+    if isinstance(auth_data, dict):
+        value = auth_data.get("uid")
+        return str(value) if value else None
+
+    return None
+
+
+def _resolve_payload(req: https_fn.CallableRequest) -> Dict[str, Any]:
+    payload = req.data if isinstance(req.data, dict) else {}
+    nested = payload.get("data")
+    if isinstance(nested, dict):
+        return nested
+    return payload
 
 
 def _extract_uid(req: https_fn.CallableRequest) -> str | None:
