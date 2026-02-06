@@ -8,8 +8,6 @@ PlanTier resolvePlanTier(SubscriptionSummary? summary) {
   final status = summary.status.toLowerCase();
   final now = DateTime.now();
   final isPaidActive = status == 'active' &&
-      summary.subscriptionId != null &&
-      summary.subscriptionId!.isNotEmpty &&
       (summary.currentPeriodEnd == null || summary.currentPeriodEnd!.isAfter(now));
   if (plan == 'elite' && isPaidActive) return PlanTier.elite;
   if (plan == 'pro' && isPaidActive) return PlanTier.pro;

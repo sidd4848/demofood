@@ -57,7 +57,6 @@ class _DietPlanPageState extends State<DietPlanPage> {
       fetchDietPlan(),
       fetchUserProfileSummary(),
       fetchDietGenerationChoice(),
-      fetchProfileJobId(),
       fetchUserSubscription(),
       fetchUserQuotaSummary(),
     ]);
@@ -75,9 +74,9 @@ class _DietPlanPageState extends State<DietPlanPage> {
       plan: resolvedPlan,
       profile: results[1] as UserProfileSummary?,
       choice: results[2] as DietGenerationChoice?,
-      jobId: results[3] as String?,
-      subscription: results[4] as SubscriptionSummary?,
-      quota: results[5] as UserQuotaSummary?,
+      jobId: resolvedPlan?.jobId,
+      subscription: results[3] as SubscriptionSummary?,
+      quota: results[4] as UserQuotaSummary?,
       upgradeRequest: upgradeRequest,
     );
   }

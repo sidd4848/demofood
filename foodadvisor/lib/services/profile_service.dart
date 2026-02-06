@@ -156,9 +156,16 @@ Future<SubscriptionSummary?> fetchUserSubscription() async {
   if (!snapshot.exists) return null;
   final data = snapshot.data();
   if (data == null) return null;
-  final plan = data['plan']?.toString() ?? 'free';
-  final status = data['subscriptionStatus']?.toString() ?? 'trial';
-  final subscriptionId = data['subscriptionId']?.toString();
+  final plan =
+      data['plan']?.toString() ?? data['planId']?.toString() ?? 'free';
+  final rawStatus =
+      data['subscriptionStatus']?.toString() ?? data['status']?.toString() ?? 'trial';
+  final status = switch (rawStatus.toLowerCase()) {
+    'payment_done' || 'paid' => 'active',
+    _ => rawStatus,
+  };
+  final subscriptionId =
+      data['subscriptionId']?.toString() ?? data['reqId']?.toString();
   final currentPeriodEnd = _parseFirestoreTimestamp(data['currentPeriodEnd']);
   return SubscriptionSummary(
     plan: plan,
@@ -188,38 +195,33 @@ Future<UserQuotaSummary?> fetchUserQuotaSummary() async {
 Future<DietPlanData?> fetchDietPlan() async {
   final user = FirebaseAuth.instance.currentUser;
   if (user == null) return null;
-  String? jobId;
   Map<String, dynamic>? dietData;
   try {
-    final snapshot = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
-    if (snapshot.exists) {
-      final data = snapshot.data();
-      if (data != null) {
-        final payload = data['profile'];
-        if (payload is Map<String, dynamic>) {
-          jobId = payload['jobId'] as String?;
-        }
+    final historySnapshot = await FirebaseFirestore.instance
+        .collection('userdiethistory')
+        .doc(user.uid)
+        .get();
+    if (!historySnapshot.exists) return null;
+    final historyData = historySnapshot.data();
+    if (historyData == null) return null;
+    final jobIdsRaw = historyData['job_id'];
+    if (jobIdsRaw is! List || jobIdsRaw.isEmpty) return null;
+
+    String? jobId;
+    for (var i = jobIdsRaw.length - 1; i >= 0; i--) {
+      final candidate = jobIdsRaw[i]?.toString();
+      if (candidate != null && candidate.isNotEmpty) {
+        jobId = candidate;
+        break;
       }
     }
-    if (jobId != null && jobId.isNotEmpty) {
-      final dietSnapshot = await FirebaseFirestore.instance.collection('diet').doc(jobId).get();
-      if (dietSnapshot.exists) {
-        dietData = dietSnapshot.data();
-        jobId = dietData?['jobId'] as String? ?? jobId;
-      }
-    } else {
-      final dietSnapshot = await FirebaseFirestore.instance
-          .collection('diet')
-          .where('userId', isEqualTo: user.uid)
-          .orderBy('updatedAt', descending: true)
-          .limit(1)
-          .get();
-      if (dietSnapshot.docs.isEmpty) return null;
-      final doc = dietSnapshot.docs.first;
-      dietData = doc.data();
-      jobId = dietData['jobId'] as String? ?? doc.id;
-    }
-    if (dietData == null || jobId == null || jobId.isEmpty) return null;
+    if (jobId == null || jobId.isEmpty) return null;
+
+    final dietSnapshot = await FirebaseFirestore.instance.collection('diet').doc(jobId).get();
+    if (!dietSnapshot.exists) return null;
+    dietData = dietSnapshot.data();
+    if (dietData == null) return null;
+    final resolvedJobId = dietData['jobId'] as String? ?? jobId;
     final userId = dietData['userId'] as String?;
     final startDateRaw = dietData['startDate'];
     final startDate = _parseFirestoreTimestamp(startDateRaw);
@@ -236,7 +238,7 @@ Future<DietPlanData?> fetchDietPlan() async {
       });
     }
     return DietPlanData(
-      jobId: jobId,
+      jobId: resolvedJobId,
       userId: userId,
       startDate: startDate,
       generatedAt: generatedAt,
@@ -254,6 +256,9 @@ DateTime? _parseFirestoreTimestamp(dynamic value) {
   }
   if (value is DateTime) {
     return value;
+  }
+  if (value is String && value.isNotEmpty) {
+    return DateTime.tryParse(value)?.toLocal();
   }
   return null;
 }
@@ -283,6 +288,12 @@ Future<void> saveSelfDietPlan({
     payload['startDate'] = Timestamp.fromDate(startDate);
   }
   await dietRef.set(payload, SetOptions(merge: true));
+
+  final historyRef = FirebaseFirestore.instance.collection('userdiethistory').doc(user.uid);
+  await historyRef.set({
+    'job_id': FieldValue.arrayUnion([jobId]),
+    'updatedAt': FieldValue.serverTimestamp(),
+  }, SetOptions(merge: true));
 }
 
 Future<bool> hasExistingProfile() async {
@@ -327,13 +338,17 @@ Future<UserProfileSummary?> fetchUserProfileSummary() async {
 Future<String?> fetchProfileJobId() async {
   final user = FirebaseAuth.instance.currentUser;
   if (user == null) return null;
-  final snapshot = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
+  final snapshot = await FirebaseFirestore.instance.collection('userdiethistory').doc(user.uid).get();
   if (!snapshot.exists) return null;
   final data = snapshot.data();
   if (data == null) return null;
-  final payload = data['profile'];
-  if (payload is Map<String, dynamic>) {
-    return payload['jobId'] as String?;
+  final jobIds = data['job_id'];
+  if (jobIds is! List || jobIds.isEmpty) return null;
+  for (var i = jobIds.length - 1; i >= 0; i--) {
+    final jobId = jobIds[i]?.toString();
+    if (jobId != null && jobId.isNotEmpty) {
+      return jobId;
+    }
   }
   return null;
 }

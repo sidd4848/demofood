@@ -4,6 +4,7 @@ import 'package:google_sign_in/google_sign_in.dart';
 
 import '../app.dart';
 import '../models/app_data.dart';
+import '../services/plan_access.dart';
 import '../services/profile_service.dart';
 import '../services/subscription_models.dart';
 import '../services/subscription_service.dart';
@@ -114,7 +115,7 @@ class UpgradePlanPage extends StatelessWidget {
           final subscription = dataBundle.subscription;
           final regionCode = data.regionCode ?? locale.countryCode ?? 'IN';
           final regionPricing = config.resolveRegion(regionCode);
-          final activePlan = subscription?.plan.toLowerCase() ?? 'free';
+          final activePlan = _activePlanId(subscription);
           final isProOrElite = activePlan == 'pro' || activePlan == 'elite';
           final daysRemaining = _daysRemaining(subscription?.currentPeriodEnd);
           return ListView(
@@ -360,6 +361,18 @@ class UpgradePlanPage extends StatelessWidget {
     if (plan == 'elite') return 'Elite';
     if (plan == 'pro') return 'Pro';
     return 'Free';
+  }
+
+  String _activePlanId(SubscriptionSummary? summary) {
+    switch (resolvePlanTier(summary)) {
+      case PlanTier.elite:
+        return 'elite';
+      case PlanTier.pro:
+        return 'pro';
+      case PlanTier.trial:
+      case PlanTier.free:
+        return 'free';
+    }
   }
 
   int? _daysRemaining(DateTime? currentPeriodEnd) {
