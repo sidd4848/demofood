@@ -207,10 +207,16 @@ class _SignInCardState extends State<_SignInCard> {
     final locale = Localizations.localeOf(context);
     _selectedLanguage ??= widget.data.languageCode ?? locale.languageCode;
     _selectedRegion ??= widget.data.regionCode ?? locale.countryCode ?? 'IN';
-    widget.data.setLocale(
-      language: _selectedLanguage ?? 'en',
-      region: _selectedRegion ?? 'IN',
-    );
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final language = _selectedLanguage ?? 'en';
+      final region = _selectedRegion ?? 'IN';
+      if (widget.data.languageCode == language && widget.data.regionCode == region) {
+        return;
+      }
+      widget.data.setLocale(language: language, region: region);
+    });
   }
 
   void _showMessage(String message) {
@@ -390,19 +396,19 @@ class _SignInCardState extends State<_SignInCard> {
               ),
               const SizedBox(height: 12),
               Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Expanded(
                     child: DropdownButtonFormField<String>(
                       value: _selectedLanguage,
+                      isExpanded: true,
                       isDense: true,
                       decoration: const InputDecoration(
                         labelText: "Language",
-                        prefixIcon: Icon(Icons.language_outlined, size: 18),
                         isDense: true,
-                        contentPadding: EdgeInsets.symmetric(vertical: 10, horizontal: 12),
+                        contentPadding: EdgeInsets.symmetric(vertical: 10, horizontal: 10),
                       ),
+                      style: const TextStyle(fontSize: 13),
                       items: _languages
                           .map(
                             (entry) => DropdownMenuItem(
@@ -421,18 +427,18 @@ class _SignInCardState extends State<_SignInCard> {
                       },
                     ),
                   ),
-                  const SizedBox(width: 10),
+                  const SizedBox(width: 8),
                   Expanded(
                     child: DropdownButtonFormField<String>(
                       value: _selectedRegion,
+                      isExpanded: true,
                       isDense: true,
-                      alignment: AlignmentDirectional.centerEnd,
                       decoration: const InputDecoration(
                         labelText: "Region",
-                        prefixIcon: Icon(Icons.public_outlined, size: 18),
                         isDense: true,
-                        contentPadding: EdgeInsets.symmetric(vertical: 10, horizontal: 12),
+                        contentPadding: EdgeInsets.symmetric(vertical: 10, horizontal: 10),
                       ),
+                      style: const TextStyle(fontSize: 13),
                       items: _regions
                           .map(
                             (entry) => DropdownMenuItem(
