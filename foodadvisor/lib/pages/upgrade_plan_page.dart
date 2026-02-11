@@ -116,7 +116,9 @@ class UpgradePlanPage extends StatelessWidget {
           final regionCode = data.regionCode ?? locale.countryCode ?? 'IN';
           final regionPricing = config.resolveRegion(regionCode);
           final activePlan = _activePlanId(subscription);
-          final isProOrElite = activePlan == 'pro' || activePlan == 'elite';
+          final isPro = activePlan == 'pro';
+          final isElite = activePlan == 'elite';
+          final isProOrElite = isPro || isElite;
           final daysRemaining = _daysRemaining(subscription?.currentPeriodEnd);
           return ListView(
             padding: const EdgeInsets.all(24),
@@ -131,7 +133,7 @@ class UpgradePlanPage extends StatelessWidget {
                   '10 days trial of Elite features',
                   'No card required for trial',
                 ],
-                buttonLabel: isProOrElite ? 'Free trial' : 'Current plan',
+                buttonLabel: isProOrElite ? 'Not available' : 'Current plan',
                 buttonEnabled: false,
                 accent: Colors.grey,
                 compact: isProOrElite,
@@ -146,23 +148,27 @@ class UpgradePlanPage extends StatelessWidget {
                   'WhatsApp message scheduling',
                   'Voice notes for 30 days',
                 ],
-                buttonLabel: activePlan == 'pro' ? 'Current plan' : 'Upgrade to Pro',
-                buttonEnabled: activePlan != 'pro',
+                buttonLabel: isElite
+                    ? 'Not available on Elite'
+                    : (isPro ? 'Current plan' : 'Upgrade to Pro'),
+                buttonEnabled: !isPro && !isElite,
                 accent: kPrimary,
                 highlight: true,
-                footerText: activePlan == 'pro' && daysRemaining != null
+                footerText: isPro && daysRemaining != null
                     ? '$daysRemaining days remaining'
                     : null,
-                extraAction: _buildExtendAction(
-                  context,
-                  service: service,
-                  config: config,
-                  regionPricing: regionPricing,
-                  planId: 'pro',
-                  daysRemaining: daysRemaining,
-                  messenger: messenger,
-                ),
-                onTap: activePlan == 'pro'
+                extraAction: isElite
+                    ? null
+                    : _buildExtendAction(
+                        context,
+                        service: service,
+                        config: config,
+                        regionPricing: regionPricing,
+                        planId: 'pro',
+                        daysRemaining: daysRemaining,
+                        messenger: messenger,
+                      ),
+                onTap: (isPro || isElite)
                     ? null
                     : () async {
                         final selection = await _showDurationPicker(
@@ -191,10 +197,10 @@ class UpgradePlanPage extends StatelessWidget {
                   'Unlimited recipe generation',
                   'Priority nutritionist support',
                 ],
-                buttonLabel: activePlan == 'elite' ? 'Current plan' : 'Upgrade to Elite',
-                buttonEnabled: activePlan != 'elite',
+                buttonLabel: isElite ? 'Current plan' : 'Upgrade to Elite',
+                buttonEnabled: !isElite,
                 accent: kSecondary,
-                footerText: activePlan == 'elite' && daysRemaining != null
+                footerText: isElite && daysRemaining != null
                     ? '$daysRemaining days remaining'
                     : null,
                 extraAction: _buildExtendAction(
@@ -206,7 +212,7 @@ class UpgradePlanPage extends StatelessWidget {
                   daysRemaining: daysRemaining,
                   messenger: messenger,
                 ),
-                onTap: activePlan == 'elite'
+                onTap: isElite
                     ? null
                     : () async {
                         final selection = await _showDurationPicker(

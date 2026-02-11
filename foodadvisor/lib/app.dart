@@ -388,55 +388,68 @@ class _SignInCardState extends State<_SignInCard> {
                 "Sign in to continue your personalised food journey.",
                 style: TextStyle(color: Colors.grey.shade700, height: 1.4),
               ),
-              const SizedBox(height: 16),
-              Column(
+              const SizedBox(height: 12),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  DropdownButtonFormField<String>(
-                    value: _selectedLanguage,
-                    decoration: const InputDecoration(
-                      labelText: "Language",
-                      prefixIcon: Icon(Icons.language_outlined),
+                  Expanded(
+                    child: DropdownButtonFormField<String>(
+                      value: _selectedLanguage,
+                      isDense: true,
+                      decoration: const InputDecoration(
+                        labelText: "Language",
+                        prefixIcon: Icon(Icons.language_outlined, size: 18),
+                        isDense: true,
+                        contentPadding: EdgeInsets.symmetric(vertical: 10, horizontal: 12),
+                      ),
+                      items: _languages
+                          .map(
+                            (entry) => DropdownMenuItem(
+                              value: entry['code'],
+                              child: Text(entry['label'] ?? '', overflow: TextOverflow.ellipsis),
+                            ),
+                          )
+                          .toList(),
+                      onChanged: (value) {
+                        if (value == null) return;
+                        setState(() => _selectedLanguage = value);
+                        widget.data.setLocale(
+                          language: value,
+                          region: _selectedRegion ?? 'IN',
+                        );
+                      },
                     ),
-                    items: _languages
-                        .map(
-                          (entry) => DropdownMenuItem(
-                            value: entry['code'],
-                            child: Text(entry['label'] ?? ''),
-                          ),
-                        )
-                        .toList(),
-                    onChanged: (value) {
-                      if (value == null) return;
-                      setState(() => _selectedLanguage = value);
-                      widget.data.setLocale(
-                        language: value,
-                        region: _selectedRegion ?? 'IN',
-                      );
-                    },
                   ),
-                  const SizedBox(height: 12),
-                  DropdownButtonFormField<String>(
-                    value: _selectedRegion,
-                    decoration: const InputDecoration(
-                      labelText: "Region",
-                      prefixIcon: Icon(Icons.public_outlined),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: DropdownButtonFormField<String>(
+                      value: _selectedRegion,
+                      isDense: true,
+                      alignment: AlignmentDirectional.centerEnd,
+                      decoration: const InputDecoration(
+                        labelText: "Region",
+                        prefixIcon: Icon(Icons.public_outlined, size: 18),
+                        isDense: true,
+                        contentPadding: EdgeInsets.symmetric(vertical: 10, horizontal: 12),
+                      ),
+                      items: _regions
+                          .map(
+                            (entry) => DropdownMenuItem(
+                              value: entry['code'],
+                              child: Text(entry['label'] ?? '', overflow: TextOverflow.ellipsis),
+                            ),
+                          )
+                          .toList(),
+                      onChanged: (value) {
+                        if (value == null) return;
+                        setState(() => _selectedRegion = value);
+                        widget.data.setLocale(
+                          language: _selectedLanguage ?? 'en',
+                          region: value,
+                        );
+                      },
                     ),
-                    items: _regions
-                        .map(
-                          (entry) => DropdownMenuItem(
-                            value: entry['code'],
-                            child: Text(entry['label'] ?? ''),
-                          ),
-                        )
-                        .toList(),
-                    onChanged: (value) {
-                      if (value == null) return;
-                      setState(() => _selectedRegion = value);
-                      widget.data.setLocale(
-                        language: _selectedLanguage ?? 'en',
-                        region: value,
-                      );
-                    },
                   ),
                 ],
               ),
