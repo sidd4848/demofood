@@ -1,13 +1,17 @@
+import 'dart:convert';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:http/http.dart' as http;
 
 import '../models/app_data.dart';
 
 class AiDietService {
   const AiDietService();
 
-  static const collectionName = 'aiDietPlans';
+  static const collectionName = 'dietPlans';
+  static final Uri _generateDietEndpoint =
+      Uri.parse('https://generate-diet-by-ai-b2g4omif7q-uc.a.run.app');
 
   Future<int> countRecentRequests({required String userId, Duration window = const Duration(days: 7)}) async {
     final since = DateTime.now().subtract(window);
@@ -59,13 +63,50 @@ class AiDietService {
       'generatedBy': 'ai',
       'createdAt': DateTime.now().toIso8601String(),
     };
-    final callable = FirebaseFunctions.instance.httpsCallable('generate_diet_by_ai');
-    final result = await callable.call(payload);
-    final data = result.data;
-    if (data is Map && data['requestId'] is String) {
-      return FirebaseFirestore.instance.collection(collectionName).doc(data['requestId'] as String);
+
+    final response = await http.post(
+      _generateDietEndpoint,
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode(payload),
+    );
+
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw StateError('AI diet request failed: ${response.statusCode} ${response.body}');
+    }
+
+    final resultData = _decodeResponseBody(response.body);
+    final requestId = _extractRequestId(resultData);
+
+    if (requestId != null && requestId.isNotEmpty) {
+      return FirebaseFirestore.instance.collection(collectionName).doc(requestId);
     }
     throw StateError('AI diet request failed: missing request ID.');
+  }
+
+  dynamic _decodeResponseBody(String body) {
+    if (body.trim().isEmpty) return null;
+    try {
+      return jsonDecode(body);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  String? _extractRequestId(dynamic payload) {
+    if (payload is Map) {
+      final direct = payload['requestId'];
+      if (direct is String && direct.trim().isNotEmpty) {
+        return direct;
+      }
+      final nested = payload['data'];
+      if (nested is Map) {
+        final nestedId = nested['requestId'];
+        if (nestedId is String && nestedId.trim().isNotEmpty) {
+          return nestedId;
+        }
+      }
+    }
+    return null;
   }
 
   Map<String, dynamic> _responseSchema() {
