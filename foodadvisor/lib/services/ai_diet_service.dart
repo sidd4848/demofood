@@ -61,9 +61,11 @@ class AiDietService {
     };
     final callable = FirebaseFunctions.instance.httpsCallable('generate_diet_by_ai');
     final result = await callable.call(payload);
-    final data = result.data;
-    if (data is Map && data['requestId'] is String) {
-      return FirebaseFirestore.instance.collection(collectionName).doc(data['requestId'] as String);
+    final resultData = result.data;
+    if (resultData is Map && resultData['requestId'] is String) {
+      return FirebaseFirestore.instance
+          .collection(collectionName)
+          .doc(resultData['requestId'] as String);
     }
     throw StateError('AI diet request failed: missing request ID.');
   }
