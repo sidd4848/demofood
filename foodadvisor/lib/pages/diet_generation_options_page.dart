@@ -10,6 +10,7 @@ import '../widgets/app_sidebar_shell.dart';
 import '../app.dart';
 import 'diet_plan_page.dart';
 import 'nutritionist_profiles_page.dart';
+import 'ai_plan_page.dart';
 import 'upgrade_plan_page.dart';
 
 class DietGenerationOptionsPage extends StatefulWidget {
@@ -187,8 +188,7 @@ class _DietGenerationOptionsPageState extends State<DietGenerationOptionsPage> {
           final planTier = resolvePlanTier(access?.subscription);
           final canUseNutritionist = canAccessNutritionist(planTier);
           final canUseAi = planTier == PlanTier.elite ||
-              planTier == PlanTier.pro ||
-              planTier == PlanTier.trial;
+              planTier == PlanTier.pro;
           return ListView(
             padding: const EdgeInsets.all(24),
             children: [
@@ -207,12 +207,21 @@ class _DietGenerationOptionsPageState extends State<DietGenerationOptionsPage> {
                 description: "Fast, smart suggestions tailored to your profile.",
                 icon: Icons.auto_awesome_rounded,
                 accent: kPrimary,
+                isLocked: !canUseAi,
                 onTap: () {
                   if (!canUseAi) {
                     _showUpgradeDialog();
                     return;
                   }
-                  _saveChoiceAndOpen(context, 'ai');
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => AiPlanPage(
+                        data: widget.data,
+                        preferencesBuilder: widget.preferencesBuilder,
+                      ),
+                    ),
+                  );
                 },
               ),
               const SizedBox(height: 16),
@@ -272,6 +281,7 @@ class _OptionCard extends StatelessWidget {
   final VoidCallback? onTap;
   final String? disabledLabel;
   final bool isLoading;
+  final bool isLocked;
 
   const _OptionCard({
     required this.title,
@@ -281,6 +291,7 @@ class _OptionCard extends StatelessWidget {
     required this.onTap,
     this.disabledLabel,
     this.isLoading = false,
+    this.isLocked = false,
   });
 
   @override
@@ -327,7 +338,7 @@ class _OptionCard extends StatelessWidget {
                     )
                   : FilledButton(
                       style: FilledButton.styleFrom(
-                        backgroundColor: accent,
+                        backgroundColor: isLocked ? Colors.grey : accent,
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                       ),
                       onPressed: onTap,
@@ -340,7 +351,7 @@ class _OptionCard extends StatelessWidget {
                                 valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
                               ),
                             )
-                          : const Text("Continue"),
+                          : Text(isLocked ? "Pro / Elite only" : "Continue"),
                     ),
             ),
           ],
