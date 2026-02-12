@@ -54,6 +54,9 @@ class AppData extends ChangeNotifier {
   }
 
   void setLocale({required String language, required String region}) {
+    if (languageCode == language && regionCode == region) {
+      return;
+    }
     languageCode = language;
     regionCode = region;
     notifyListeners();
