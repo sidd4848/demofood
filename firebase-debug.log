@@ -1,0 +1,132 @@
+[debug] [2026-02-12T13:12:40.613Z] ----------------------------------------------------------------------
+[debug] [2026-02-12T13:12:40.625Z] Command:       C:\nvm4w\nodejs\node.exe C:\Users\ranja\AppData\Roaming\npm\node_modules\firebase-tools\lib\bin\firebase.js deploy --only functions:ai-flask --config ai-flask/firebase.json
+[debug] [2026-02-12T13:12:40.625Z] CLI Version:   15.4.0
+[debug] [2026-02-12T13:12:40.625Z] Platform:      win32
+[debug] [2026-02-12T13:12:40.625Z] Node Version:  v20.20.0
+[debug] [2026-02-12T13:12:40.626Z] Time:          Thu Feb 12 2026 18:42:40 GMT+0530 (India Standard Time)
+[debug] [2026-02-12T13:12:40.626Z] ----------------------------------------------------------------------
+[debug] 
+[debug] [2026-02-12T13:12:42.966Z] Object "/functions" in "firebase.json" is missing required property: {"missingProperty":"source"}
+[debug] [2026-02-12T13:12:42.966Z] Object "/functions" in "firebase.json" is missing required property: {"missingProperty":"remoteSource"}
+[debug] [2026-02-12T13:12:42.966Z] Field "/functions" in "firebase.json" is possibly invalid: must be array
+[debug] [2026-02-12T13:12:42.967Z] Field "/functions" in "firebase.json" is possibly invalid: must match a schema in anyOf
+[debug] [2026-02-12T13:12:42.972Z] > command requires scopes: ["email","openid","https://www.googleapis.com/auth/cloudplatformprojects.readonly","https://www.googleapis.com/auth/firebase","https://www.googleapis.com/auth/cloud-platform"]
+[debug] [2026-02-12T13:12:42.972Z] > authorizing via signed-in user (ranjansiddharth484848@gmail.com)
+[debug] [2026-02-12T13:12:42.973Z] [iam] checking project foodadvisor-e2cd0 for permissions ["cloudfunctions.functions.create","cloudfunctions.functions.delete","cloudfunctions.functions.get","cloudfunctions.functions.list","cloudfunctions.functions.update","cloudfunctions.operations.get","firebase.projects.get"]
+[debug] [2026-02-12T13:12:42.987Z] Checked if tokens are valid: true, expires at: 1770904782407
+[debug] [2026-02-12T13:12:42.988Z] Checked if tokens are valid: true, expires at: 1770904782407
+[debug] [2026-02-12T13:12:42.989Z] >>> [apiv2][query] POST https://cloudresourcemanager.googleapis.com/v1/projects/foodadvisor-e2cd0:testIamPermissions [none]
+[debug] [2026-02-12T13:12:42.989Z] >>> [apiv2][(partial)header] POST https://cloudresourcemanager.googleapis.com/v1/projects/foodadvisor-e2cd0:testIamPermissions x-goog-quota-user=projects/foodadvisor-e2cd0
+[debug] [2026-02-12T13:12:42.989Z] >>> [apiv2][body] POST https://cloudresourcemanager.googleapis.com/v1/projects/foodadvisor-e2cd0:testIamPermissions {"permissions":["cloudfunctions.functions.create","cloudfunctions.functions.delete","cloudfunctions.functions.get","cloudfunctions.functions.list","cloudfunctions.functions.update","cloudfunctions.operations.get","firebase.projects.get"]}
+[debug] [2026-02-12T13:12:44.380Z] <<< [apiv2][status] POST https://cloudresourcemanager.googleapis.com/v1/projects/foodadvisor-e2cd0:testIamPermissions 200
+[debug] [2026-02-12T13:12:44.380Z] <<< [apiv2][body] POST https://cloudresourcemanager.googleapis.com/v1/projects/foodadvisor-e2cd0:testIamPermissions {"permissions":["cloudfunctions.functions.create","cloudfunctions.functions.delete","cloudfunctions.functions.get","cloudfunctions.functions.list","cloudfunctions.functions.update","cloudfunctions.operations.get","firebase.projects.get"]}
+[debug] [2026-02-12T13:12:44.380Z] Checked if tokens are valid: true, expires at: 1770904782407
+[debug] [2026-02-12T13:12:44.380Z] Checked if tokens are valid: true, expires at: 1770904782407
+[debug] [2026-02-12T13:12:44.380Z] >>> [apiv2][query] POST https://iam.googleapis.com/v1/projects/foodadvisor-e2cd0/serviceAccounts/foodadvisor-e2cd0@appspot.gserviceaccount.com:testIamPermissions [none]
+[debug] [2026-02-12T13:12:44.380Z] >>> [apiv2][body] POST https://iam.googleapis.com/v1/projects/foodadvisor-e2cd0/serviceAccounts/foodadvisor-e2cd0@appspot.gserviceaccount.com:testIamPermissions {"permissions":["iam.serviceAccounts.actAs"]}
+[debug] [2026-02-12T13:12:44.997Z] <<< [apiv2][status] POST https://iam.googleapis.com/v1/projects/foodadvisor-e2cd0/serviceAccounts/foodadvisor-e2cd0@appspot.gserviceaccount.com:testIamPermissions 200
+[debug] [2026-02-12T13:12:44.998Z] <<< [apiv2][body] POST https://iam.googleapis.com/v1/projects/foodadvisor-e2cd0/serviceAccounts/foodadvisor-e2cd0@appspot.gserviceaccount.com:testIamPermissions {"permissions":["iam.serviceAccounts.actAs"]}
+[info] 
+[info] === Deploying to 'foodadvisor-e2cd0'...
+[info] 
+[info] i  deploying functions 
+[debug] [2026-02-12T13:12:45.015Z] Checked if tokens are valid: true, expires at: 1770904782407
+[debug] [2026-02-12T13:12:45.015Z] Checked if tokens are valid: true, expires at: 1770904782407
+[debug] [2026-02-12T13:12:45.015Z] >>> [apiv2][query] GET https://cloudresourcemanager.googleapis.com/v1/projects/foodadvisor-e2cd0 [none]
+[debug] [2026-02-12T13:12:45.325Z] <<< [apiv2][status] GET https://cloudresourcemanager.googleapis.com/v1/projects/foodadvisor-e2cd0 200
+[debug] [2026-02-12T13:12:45.326Z] <<< [apiv2][body] GET https://cloudresourcemanager.googleapis.com/v1/projects/foodadvisor-e2cd0 {"projectNumber":"945368463692","projectId":"foodadvisor-e2cd0","lifecycleState":"ACTIVE","name":"foodadvisor","labels":{"firebase":"enabled","firebase-core":"disabled"},"createTime":"2026-01-05T07:18:23.250219Z"}
+[info] i  functions: preparing codebase ai-flask for deployment 
+[info] i  functions: ensuring required API cloudfunctions.googleapis.com is enabled... 
+[info] i  functions: ensuring required API cloudbuild.googleapis.com is enabled... 
+[info] i  artifactregistry: ensuring required API artifactregistry.googleapis.com is enabled... 
+[debug] [2026-02-12T13:12:45.329Z] Checked if tokens are valid: true, expires at: 1770904782407
+[debug] [2026-02-12T13:12:45.329Z] Checked if tokens are valid: true, expires at: 1770904782407
+[debug] [2026-02-12T13:12:45.329Z] >>> [apiv2][query] GET https://firebase.googleapis.com/v1beta1/projects/foodadvisor-e2cd0/adminSdkConfig [none]
+[debug] [2026-02-12T13:12:46.272Z] <<< [apiv2][status] GET https://firebase.googleapis.com/v1beta1/projects/foodadvisor-e2cd0/adminSdkConfig 200
+[debug] [2026-02-12T13:12:46.272Z] <<< [apiv2][body] GET https://firebase.googleapis.com/v1beta1/projects/foodadvisor-e2cd0/adminSdkConfig {"projectId":"foodadvisor-e2cd0","storageBucket":"foodadvisor-e2cd0.firebasestorage.app"}
+[debug] [2026-02-12T13:12:46.272Z] Checked if tokens are valid: true, expires at: 1770904782407
+[debug] [2026-02-12T13:12:46.272Z] Checked if tokens are valid: true, expires at: 1770904782407
+[debug] [2026-02-12T13:12:46.272Z] >>> [apiv2][query] GET https://runtimeconfig.googleapis.com/v1beta1/projects/foodadvisor-e2cd0/configs [none]
+[debug] [2026-02-12T13:12:47.576Z] <<< [apiv2][status] GET https://runtimeconfig.googleapis.com/v1beta1/projects/foodadvisor-e2cd0/configs 200
+[debug] [2026-02-12T13:12:47.576Z] <<< [apiv2][body] GET https://runtimeconfig.googleapis.com/v1beta1/projects/foodadvisor-e2cd0/configs {}
+[debug] [2026-02-12T13:12:47.582Z] Customer code is not Node
+[debug] [2026-02-12T13:12:47.583Z] Validating python source
+[debug] [2026-02-12T13:12:47.583Z] Building python source
+[info] i  functions: Loading and analyzing source code for codebase ai-flask to determine what to deploy 
+[debug] [2026-02-12T13:12:47.584Z] Could not find functions.yaml. Must use http discovery
+[debug] [2026-02-12T13:12:47.592Z] Running command with virtualenv: command="C:\Users\ranja\Desktop\ML Projects\demofood\ai-flask\functions\venv\Scripts\activate.bat", args=["","&&","python.exe","-c","\"import firebase_functions; import os; print(os.path.dirname(firebase_functions.__file__))\""]
+[debug] [2026-02-12T13:12:47.637Z] stderr: The system cannot find the path specified.
+
+[debug] [2026-02-12T13:12:47.764Z] Error: spawn "C:\Users\ranja\Desktop\ML Projects\demofood\ai-flask\functions\venv\Scripts\activate.bat" ENOENT
+    at notFoundError (C:\Users\ranja\AppData\Roaming\npm\node_modules\firebase-tools\node_modules\cross-spawn\lib\enoent.js:6:26)
+    at verifyENOENT (C:\Users\ranja\AppData\Roaming\npm\node_modules\firebase-tools\node_modules\cross-spawn\lib\enoent.js:40:16)
+    at cp.emit (C:\Users\ranja\AppData\Roaming\npm\node_modules\firebase-tools\node_modules\cross-spawn\lib\enoent.js:27:25)
+    at ChildProcess._handle.onexit (node:internal/child_process:293:12)
+[error] 
+[error] Error: An unexpected error has occurred.
+[debug] [2026-02-12T13:14:10.190Z] ----------------------------------------------------------------------
+[debug] [2026-02-12T13:14:10.192Z] Command:       C:\nvm4w\nodejs\node.exe C:\Users\ranja\AppData\Roaming\npm\node_modules\firebase-tools\lib\bin\firebase.js deploy --only functions:ai-flask --config ai-flask/firebase.json
+[debug] [2026-02-12T13:14:10.193Z] CLI Version:   15.4.0
+[debug] [2026-02-12T13:14:10.193Z] Platform:      win32
+[debug] [2026-02-12T13:14:10.193Z] Node Version:  v20.20.0
+[debug] [2026-02-12T13:14:10.193Z] Time:          Thu Feb 12 2026 18:44:10 GMT+0530 (India Standard Time)
+[debug] [2026-02-12T13:14:10.193Z] ----------------------------------------------------------------------
+[debug] 
+[debug] [2026-02-12T13:14:11.940Z] Object "/functions" in "firebase.json" is missing required property: {"missingProperty":"source"}
+[debug] [2026-02-12T13:14:11.940Z] Object "/functions" in "firebase.json" is missing required property: {"missingProperty":"remoteSource"}
+[debug] [2026-02-12T13:14:11.940Z] Field "/functions" in "firebase.json" is possibly invalid: must be array
+[debug] [2026-02-12T13:14:11.940Z] Field "/functions" in "firebase.json" is possibly invalid: must match a schema in anyOf
+[debug] [2026-02-12T13:14:11.946Z] > command requires scopes: ["email","openid","https://www.googleapis.com/auth/cloudplatformprojects.readonly","https://www.googleapis.com/auth/firebase","https://www.googleapis.com/auth/cloud-platform"]
+[debug] [2026-02-12T13:14:11.946Z] > authorizing via signed-in user (ranjansiddharth484848@gmail.com)
+[debug] [2026-02-12T13:14:11.947Z] [iam] checking project foodadvisor-e2cd0 for permissions ["cloudfunctions.functions.create","cloudfunctions.functions.delete","cloudfunctions.functions.get","cloudfunctions.functions.list","cloudfunctions.functions.update","cloudfunctions.operations.get","firebase.projects.get"]
+[debug] [2026-02-12T13:14:11.948Z] Checked if tokens are valid: true, expires at: 1770904782407
+[debug] [2026-02-12T13:14:11.948Z] Checked if tokens are valid: true, expires at: 1770904782407
+[debug] [2026-02-12T13:14:11.949Z] >>> [apiv2][query] POST https://cloudresourcemanager.googleapis.com/v1/projects/foodadvisor-e2cd0:testIamPermissions [none]
+[debug] [2026-02-12T13:14:11.949Z] >>> [apiv2][(partial)header] POST https://cloudresourcemanager.googleapis.com/v1/projects/foodadvisor-e2cd0:testIamPermissions x-goog-quota-user=projects/foodadvisor-e2cd0
+[debug] [2026-02-12T13:14:11.950Z] >>> [apiv2][body] POST https://cloudresourcemanager.googleapis.com/v1/projects/foodadvisor-e2cd0:testIamPermissions {"permissions":["cloudfunctions.functions.create","cloudfunctions.functions.delete","cloudfunctions.functions.get","cloudfunctions.functions.list","cloudfunctions.functions.update","cloudfunctions.operations.get","firebase.projects.get"]}
+[debug] [2026-02-12T13:14:13.388Z] <<< [apiv2][status] POST https://cloudresourcemanager.googleapis.com/v1/projects/foodadvisor-e2cd0:testIamPermissions 200
+[debug] [2026-02-12T13:14:13.388Z] <<< [apiv2][body] POST https://cloudresourcemanager.googleapis.com/v1/projects/foodadvisor-e2cd0:testIamPermissions {"permissions":["cloudfunctions.functions.create","cloudfunctions.functions.delete","cloudfunctions.functions.get","cloudfunctions.functions.list","cloudfunctions.functions.update","cloudfunctions.operations.get","firebase.projects.get"]}
+[debug] [2026-02-12T13:14:13.388Z] Checked if tokens are valid: true, expires at: 1770904782407
+[debug] [2026-02-12T13:14:13.388Z] Checked if tokens are valid: true, expires at: 1770904782407
+[debug] [2026-02-12T13:14:13.388Z] >>> [apiv2][query] POST https://iam.googleapis.com/v1/projects/foodadvisor-e2cd0/serviceAccounts/foodadvisor-e2cd0@appspot.gserviceaccount.com:testIamPermissions [none]
+[debug] [2026-02-12T13:14:13.388Z] >>> [apiv2][body] POST https://iam.googleapis.com/v1/projects/foodadvisor-e2cd0/serviceAccounts/foodadvisor-e2cd0@appspot.gserviceaccount.com:testIamPermissions {"permissions":["iam.serviceAccounts.actAs"]}
+[debug] [2026-02-12T13:14:14.990Z] <<< [apiv2][status] POST https://iam.googleapis.com/v1/projects/foodadvisor-e2cd0/serviceAccounts/foodadvisor-e2cd0@appspot.gserviceaccount.com:testIamPermissions 200
+[debug] [2026-02-12T13:14:14.991Z] <<< [apiv2][body] POST https://iam.googleapis.com/v1/projects/foodadvisor-e2cd0/serviceAccounts/foodadvisor-e2cd0@appspot.gserviceaccount.com:testIamPermissions {"permissions":["iam.serviceAccounts.actAs"]}
+[info] 
+[info] === Deploying to 'foodadvisor-e2cd0'...
+[info] 
+[info] i  deploying functions 
+[debug] [2026-02-12T13:14:14.994Z] Checked if tokens are valid: true, expires at: 1770904782407
+[debug] [2026-02-12T13:14:14.994Z] Checked if tokens are valid: true, expires at: 1770904782407
+[debug] [2026-02-12T13:14:14.994Z] >>> [apiv2][query] GET https://cloudresourcemanager.googleapis.com/v1/projects/foodadvisor-e2cd0 [none]
+[debug] [2026-02-12T13:14:15.316Z] <<< [apiv2][status] GET https://cloudresourcemanager.googleapis.com/v1/projects/foodadvisor-e2cd0 200
+[debug] [2026-02-12T13:14:15.316Z] <<< [apiv2][body] GET https://cloudresourcemanager.googleapis.com/v1/projects/foodadvisor-e2cd0 {"projectNumber":"945368463692","projectId":"foodadvisor-e2cd0","lifecycleState":"ACTIVE","name":"foodadvisor","labels":{"firebase":"enabled","firebase-core":"disabled"},"createTime":"2026-01-05T07:18:23.250219Z"}
+[info] i  functions: preparing codebase ai-flask for deployment 
+[info] i  functions: ensuring required API cloudfunctions.googleapis.com is enabled... 
+[info] i  functions: ensuring required API cloudbuild.googleapis.com is enabled... 
+[info] i  artifactregistry: ensuring required API artifactregistry.googleapis.com is enabled... 
+[debug] [2026-02-12T13:14:15.319Z] Checked if tokens are valid: true, expires at: 1770904782407
+[debug] [2026-02-12T13:14:15.319Z] Checked if tokens are valid: true, expires at: 1770904782407
+[debug] [2026-02-12T13:14:15.319Z] >>> [apiv2][query] GET https://firebase.googleapis.com/v1beta1/projects/foodadvisor-e2cd0/adminSdkConfig [none]
+[debug] [2026-02-12T13:14:16.182Z] <<< [apiv2][status] GET https://firebase.googleapis.com/v1beta1/projects/foodadvisor-e2cd0/adminSdkConfig 200
+[debug] [2026-02-12T13:14:16.182Z] <<< [apiv2][body] GET https://firebase.googleapis.com/v1beta1/projects/foodadvisor-e2cd0/adminSdkConfig {"projectId":"foodadvisor-e2cd0","storageBucket":"foodadvisor-e2cd0.firebasestorage.app"}
+[debug] [2026-02-12T13:14:16.182Z] Checked if tokens are valid: true, expires at: 1770904782407
+[debug] [2026-02-12T13:14:16.182Z] Checked if tokens are valid: true, expires at: 1770904782407
+[debug] [2026-02-12T13:14:16.182Z] >>> [apiv2][query] GET https://runtimeconfig.googleapis.com/v1beta1/projects/foodadvisor-e2cd0/configs [none]
+[debug] [2026-02-12T13:14:17.355Z] <<< [apiv2][status] GET https://runtimeconfig.googleapis.com/v1beta1/projects/foodadvisor-e2cd0/configs 200
+[debug] [2026-02-12T13:14:17.355Z] <<< [apiv2][body] GET https://runtimeconfig.googleapis.com/v1beta1/projects/foodadvisor-e2cd0/configs {}
+[debug] [2026-02-12T13:14:17.356Z] Customer code is not Node
+[debug] [2026-02-12T13:14:17.357Z] Validating python source
+[debug] [2026-02-12T13:14:17.357Z] Building python source
+[info] i  functions: Loading and analyzing source code for codebase ai-flask to determine what to deploy 
+[debug] [2026-02-12T13:14:17.358Z] Could not find functions.yaml. Must use http discovery
+[debug] [2026-02-12T13:14:17.364Z] Running command with virtualenv: command="C:\Users\ranja\Desktop\ML Projects\demofood\ai-flask\functions\venv\Scripts\activate.bat", args=["","&&","python.exe","-c","\"import firebase_functions; import os; print(os.path.dirname(firebase_functions.__file__))\""]
+[debug] [2026-02-12T13:14:17.381Z] stderr: The system cannot find the path specified.
+
+[debug] [2026-02-12T13:14:17.520Z] Error: spawn "C:\Users\ranja\Desktop\ML Projects\demofood\ai-flask\functions\venv\Scripts\activate.bat" ENOENT
+    at notFoundError (C:\Users\ranja\AppData\Roaming\npm\node_modules\firebase-tools\node_modules\cross-spawn\lib\enoent.js:6:26)
+    at verifyENOENT (C:\Users\ranja\AppData\Roaming\npm\node_modules\firebase-tools\node_modules\cross-spawn\lib\enoent.js:40:16)
+    at cp.emit (C:\Users\ranja\AppData\Roaming\npm\node_modules\firebase-tools\node_modules\cross-spawn\lib\enoent.js:27:25)
+    at ChildProcess._handle.onexit (node:internal/child_process:293:12)
+[error] 
+[error] Error: An unexpected error has occurred.
