@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
 import '../models/app_data.dart';
@@ -56,9 +57,15 @@ class AiDietService {
       'responseSchema': _responseSchema(),
       'responseFormat': 'json',
       'generatedBy': 'ai',
-      'createdAt': FieldValue.serverTimestamp(),
+      'createdAt': DateTime.now().toIso8601String(),
     };
-    return FirebaseFirestore.instance.collection(collectionName).add(payload);
+    final callable = FirebaseFunctions.instance.httpsCallable('generate_diet_by_ai');
+    final result = await callable.call(payload);
+    final data = result.data;
+    if (data is Map && data['requestId'] is String) {
+      return FirebaseFirestore.instance.collection(collectionName).doc(data['requestId'] as String);
+    }
+    throw StateError('AI diet request failed: missing request ID.');
   }
 
   Map<String, dynamic> _responseSchema() {
