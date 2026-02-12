@@ -184,10 +184,17 @@ class _SignInCardState extends State<_SignInCard> {
   void didChangeDependencies() {
     super.didChangeDependencies();
     final locale = Localizations.localeOf(context);
-    widget.data.setLocale(
-      language: widget.data.languageCode ?? locale.languageCode,
-      region: widget.data.regionCode ?? locale.countryCode ?? 'IN',
-    );
+    final language = widget.data.languageCode ?? locale.languageCode;
+    final region = widget.data.regionCode ?? locale.countryCode ?? 'IN';
+
+    if (widget.data.languageCode == language && widget.data.regionCode == region) {
+      return;
+    }
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      widget.data.setLocale(language: language, region: region);
+    });
   }
 
   void _showMessage(String message) {
