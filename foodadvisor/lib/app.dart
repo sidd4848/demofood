@@ -166,26 +166,6 @@ class _SignInCardState extends State<_SignInCard> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   bool _isLoading = false;
-  String? _selectedLanguage;
-  String? _selectedRegion;
-
-  static const _languages = [
-    {'code': 'en', 'label': 'English'},
-    {'code': 'hi', 'label': 'Hindi'},
-    {'code': 'ta', 'label': 'Tamil'},
-    {'code': 'te', 'label': 'Telugu'},
-    {'code': 'kn', 'label': 'Kannada'},
-    {'code': 'ml', 'label': 'Malayalam'},
-  ];
-
-  static const _regions = [
-    {'code': 'IN', 'label': 'India'},
-    {'code': 'US', 'label': 'United States'},
-    {'code': 'GB', 'label': 'United Kingdom'},
-    {'code': 'AE', 'label': 'UAE'},
-    {'code': 'SG', 'label': 'Singapore'},
-    {'code': 'AU', 'label': 'Australia'},
-  ];
 
   bool get _canSubmit {
     return _emailController.text.trim().isNotEmpty &&
@@ -203,13 +183,10 @@ class _SignInCardState extends State<_SignInCard> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    if (_selectedLanguage != null && _selectedRegion != null) return;
     final locale = Localizations.localeOf(context);
-    _selectedLanguage ??= widget.data.languageCode ?? locale.languageCode;
-    _selectedRegion ??= widget.data.regionCode ?? locale.countryCode ?? 'IN';
     widget.data.setLocale(
-      language: _selectedLanguage ?? 'en',
-      region: _selectedRegion ?? 'IN',
+      language: widget.data.languageCode ?? locale.languageCode,
+      region: widget.data.regionCode ?? locale.countryCode ?? 'IN',
     );
   }
 
@@ -387,58 +364,6 @@ class _SignInCardState extends State<_SignInCard> {
               Text(
                 "Sign in to continue your personalised food journey.",
                 style: TextStyle(color: Colors.grey.shade700, height: 1.4),
-              ),
-              const SizedBox(height: 16),
-              Column(
-                children: [
-                  DropdownButtonFormField<String>(
-                    value: _selectedLanguage,
-                    decoration: const InputDecoration(
-                      labelText: "Language",
-                      prefixIcon: Icon(Icons.language_outlined),
-                    ),
-                    items: _languages
-                        .map(
-                          (entry) => DropdownMenuItem(
-                            value: entry['code'],
-                            child: Text(entry['label'] ?? ''),
-                          ),
-                        )
-                        .toList(),
-                    onChanged: (value) {
-                      if (value == null) return;
-                      setState(() => _selectedLanguage = value);
-                      widget.data.setLocale(
-                        language: value,
-                        region: _selectedRegion ?? 'IN',
-                      );
-                    },
-                  ),
-                  const SizedBox(height: 12),
-                  DropdownButtonFormField<String>(
-                    value: _selectedRegion,
-                    decoration: const InputDecoration(
-                      labelText: "Region",
-                      prefixIcon: Icon(Icons.public_outlined),
-                    ),
-                    items: _regions
-                        .map(
-                          (entry) => DropdownMenuItem(
-                            value: entry['code'],
-                            child: Text(entry['label'] ?? ''),
-                          ),
-                        )
-                        .toList(),
-                    onChanged: (value) {
-                      if (value == null) return;
-                      setState(() => _selectedRegion = value);
-                      widget.data.setLocale(
-                        language: _selectedLanguage ?? 'en',
-                        region: value,
-                      );
-                    },
-                  ),
-                ],
               ),
               const SizedBox(height: 16),
               TextFormField(
