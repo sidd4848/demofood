@@ -49,11 +49,16 @@ class _AiPlanPageState extends State<AiPlanPage> {
       final response = await http.post(
         _generateDietEndpoint,
         headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({'user_id': user.uid}),
+        body: jsonEncode({
+          'data': {
+            'user_id': user.uid,
+            'userId': user.uid,
+          },
+        }),
       );
 
       if (response.statusCode < 200 || response.statusCode >= 300) {
-        throw StateError('Request failed with ${response.statusCode}: ${response.body}');
+        throw StateError('Request failed with ${response.statusCode}: ${response.body}. Sent payload with top-level data object.');
       }
 
       await saveDietGenerationChoice('ai');
