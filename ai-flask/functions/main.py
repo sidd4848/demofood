@@ -22,6 +22,7 @@ def generate_diet_by_ai(req: https_fn.CallableRequest) -> Any:
             message="userId is required.",
         )
     logger.info(f"Received diet generation request for user ID: {user_id} with payload: {payload}")
+    print(f"Received diet generation request for user ID: {user_id} with payload: {payload}")
     db = firestore.client()
 
     user_ref = db.collection("users").document(user_id)
@@ -33,12 +34,13 @@ def generate_diet_by_ai(req: https_fn.CallableRequest) -> Any:
         )
     prompt = db.collection("prompt").document("prompt_generate_dietplan").get()
 
-    request_payload = {
-        "profile": payload.get("profile", {}),
-    }
-    logger.info(f"Received diet generation payload: {request_payload}")
+    # request_payload = user_snapshot.get("profile", {})
+
+    # logger.info(f"Received diet generation payload: {request_payload}")
+    print(f"Received diet generation payload: {user_snapshot}, type: {type(user_snapshot)}  ")
+    print(f"user_snapshot data: {user_snapshot.profile}, type: {type(user_snapshot.profile)}  ")
     request_ref = db.collection("aiDietPlans").document()
-    request_ref.set(request_payload)
+    request_ref.set(user_snapshot.to_dict())
 
     return {
         "requestId": request_ref.id,
