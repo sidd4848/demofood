@@ -1,8 +1,6 @@
-import 'dart:convert';
-
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
+import 'package:cloud_functions/cloud_functions.dart';
 
 import '../models/app_data.dart';
 import '../services/profile_service.dart';
@@ -24,9 +22,6 @@ class AiPlanPage extends StatefulWidget {
 }
 
 class _AiPlanPageState extends State<AiPlanPage> {
-  static final Uri _generateDietEndpoint =
-      Uri.parse('https://generate-diet-by-ai-b2g4omif7q-uc.a.run.app');
-
   String? _error;
 
   @override
@@ -46,22 +41,10 @@ class _AiPlanPageState extends State<AiPlanPage> {
     }
 
     try {
-      final response = await http.post(
-        _generateDietEndpoint,
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({
-          'userId': user.uid,
-          'user_id': user.uid,
-          'data': {
-            'userId': user.uid,
-            'user_id': user.uid,
-          },
-        }),
-      );
-
-      if (response.statusCode < 200 || response.statusCode >= 300) {
-        throw StateError('Request failed with ${response.statusCode}: ${response.body}. Sent payload with both top-level and nested userId fields.');
-      }
+      final callable = FirebaseFunctions.instance.httpsCallable('generate_diet_by_ai');
+      await callable.call(<String, dynamic>{
+        'userId': user.uid,
+      });
 
       await saveDietGenerationChoice('ai');
 
