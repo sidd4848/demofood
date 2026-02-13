@@ -204,17 +204,21 @@ Future<DietPlanData?> fetchDietPlan() async {
     if (!historySnapshot.exists) return null;
     final historyData = historySnapshot.data();
     if (historyData == null) return null;
-    final jobIdsRaw = historyData['job_id'];
-    if (jobIdsRaw is! List || jobIdsRaw.isEmpty) return null;
-
+    final jobIdRaw = historyData['job_id'];
     String? jobId;
-    for (var i = jobIdsRaw.length - 1; i >= 0; i--) {
-      final candidate = jobIdsRaw[i]?.toString();
-      if (candidate != null && candidate.isNotEmpty) {
-        jobId = candidate;
-        break;
+
+    if (jobIdRaw is String && jobIdRaw.isNotEmpty) {
+      jobId = jobIdRaw;
+    } else if (jobIdRaw is List && jobIdRaw.isNotEmpty) {
+      for (var i = jobIdRaw.length - 1; i >= 0; i--) {
+        final candidate = jobIdRaw[i]?.toString();
+        if (candidate != null && candidate.isNotEmpty) {
+          jobId = candidate;
+          break;
+        }
       }
     }
+
     if (jobId == null || jobId.isEmpty) return null;
 
     final dietSnapshot = await FirebaseFirestore.instance.collection('diet').doc(jobId).get();
