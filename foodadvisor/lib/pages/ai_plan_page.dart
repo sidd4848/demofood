@@ -50,15 +50,17 @@ class _AiPlanPageState extends State<AiPlanPage> {
         _generateDietEndpoint,
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
+          'userId': user.uid,
+          'user_id': user.uid,
           'data': {
-            'user_id': user.uid,
             'userId': user.uid,
+            'user_id': user.uid,
           },
         }),
       );
 
       if (response.statusCode < 200 || response.statusCode >= 300) {
-        throw StateError('Request failed with ${response.statusCode}: ${response.body}. Sent payload with top-level data object.');
+        throw StateError('Request failed with ${response.statusCode}: ${response.body}. Sent payload with both top-level and nested userId fields.');
       }
 
       await saveDietGenerationChoice('ai');
