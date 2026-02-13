@@ -5,7 +5,6 @@ import 'package:google_sign_in/google_sign_in.dart';
 import '../app.dart';
 import '../models/app_data.dart';
 import '../services/profile_service.dart';
-import '../services/ai_diet_service.dart';
 import '../services/plan_access.dart';
 import '../services/recipe_service.dart';
 import '../services/subscription_models.dart';
@@ -16,6 +15,7 @@ import '../widgets/form_widgets.dart';
 import '../widgets/app_sidebar_shell.dart';
 import 'diet_generation_options_page.dart';
 import 'nutritionist_profiles_page.dart';
+import 'ai_plan_page.dart';
 import 'upgrade_plan_page.dart';
 import 'user_details_page.dart';
 
@@ -36,7 +36,6 @@ class _DietPlanPageState extends State<DietPlanPage> {
   bool _hasRoutedMissingUserId = false;
   final Map<String, _DayCompletionStatus> _dayStatuses = {};
   final Set<String> _generatedRecipes = {};
-  final AiDietService _aiDietService = const AiDietService();
   final SubscriptionService _subscriptionService = const SubscriptionService();
   final RecipeService _recipeService = const RecipeService();
 
@@ -87,55 +86,25 @@ class _DietPlanPageState extends State<DietPlanPage> {
     });
   }
 
-  Future<void> _handleAiGeneration(
-    String? jobId, {
-    required SubscriptionSummary? subscription,
-    required UserQuotaSummary? quota,
-  }) async {
+  void _openAiPlan({required SubscriptionSummary? subscription}) {
     final tier = resolvePlanTier(subscription);
-    if (!canAccessAiRegeneration(tier)) {
+    final canUseAi = tier == PlanTier.elite || tier == PlanTier.pro;
+    if (!canUseAi) {
       _showUpgradeDialog(
-        content: "Upgrade your plan to unlock AI diet regeneration.",
+        content: "AI plan is available on Pro and Elite plans.",
       );
       return;
     }
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) return;
-    if (tier == PlanTier.pro || tier == PlanTier.trial) {
-      final limit = quotaForTier(quota, tier)?.dietRegeneration ?? 0;
-      final used = await _aiDietService.countRecentRequests(userId: user.uid);
-      if (used >= limit) {
-        if (!mounted) return;
-        _showUpgradeDialog(
-          content: "You've reached your weekly AI regeneration limit. Upgrade to get more out of it.",
-        );
-        return;
-      }
-    }
-    final hadRecent = await _aiDietService.hasRecentRequest(userId: user.uid);
-    String? tweaks;
-    if (!mounted) return;
-    if (hadRecent) {
-      tweaks = await _showAiTweaksDialog();
-      if (!mounted) return;
-      if (tweaks == null) {
-        return;
-      }
-    }
-    try {
-      await _aiDietService.requestPlan(data: widget.data, jobId: jobId, tweaks: tweaks);
-      await saveDietGenerationChoice('ai');
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("AI plan request submitted.")),
-      );
-      _refreshPlan();
-    } catch (error) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Unable to request AI plan: $error")),
-      );
-    }
+
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => AiPlanPage(
+          data: widget.data,
+          preferencesBuilder: widget.preferencesBuilder,
+        ),
+      ),
+    );
   }
 
   Future<void> _handleRecipeGeneration({
@@ -205,83 +174,6 @@ class _DietPlanPageState extends State<DietPlanPage> {
       MaterialPageRoute(builder: (_) => LandingPage(data: widget.data)),
       (_) => false,
     );
-  }
-
-  Future<String?> _showAiTweaksDialog() async {
-    final suggestions = [
-      'Diet too fancy',
-      'Diet too common',
-      'Diet too complex',
-      'Diet too simple',
-    ];
-    final selected = <String>{};
-    final controller = TextEditingController();
-    final result = await showDialog<String?>(
-      context: context,
-      builder: (context) {
-        return StatefulBuilder(
-          builder: (context, setState) {
-            return AlertDialog(
-              title: const Text('Tweak your next plan'),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text('We can refine your plan based on what needs adjusting.'),
-                  const SizedBox(height: 12),
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: suggestions.map((label) {
-                      final isSelected = selected.contains(label);
-                      return ChoiceChip(
-                        label: Text(label),
-                        selected: isSelected,
-                        onSelected: (value) {
-                          setState(() {
-                            if (value) {
-                              selected.add(label);
-                            } else {
-                              selected.remove(label);
-                            }
-                          });
-                        },
-                      );
-                    }).toList(),
-                  ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: controller,
-                    maxLines: 2,
-                    decoration: const InputDecoration(
-                      labelText: 'Add any other tweaks',
-                    ),
-                  ),
-                ],
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(context, ''),
-                  child: const Text('Skip'),
-                ),
-                FilledButton(
-                  onPressed: () {
-                    final combined = [
-                      ...selected,
-                      if (controller.text.trim().isNotEmpty) controller.text.trim(),
-                    ].join(', ');
-                    Navigator.pop(context, combined);
-                  },
-                  child: const Text('Generate'),
-                ),
-              ],
-            );
-          },
-        );
-      },
-    );
-    controller.dispose();
-    return result;
   }
 
   void _routeMissingUserId(UserProfileSummary? profile) {
@@ -587,11 +479,7 @@ class _DietPlanPageState extends State<DietPlanPage> {
           ),
         if (snapshot.data?.subscription != null) const SizedBox(height: 12),
         _FinalizePlanActions(
-          onGenerateAi: () => _handleAiGeneration(
-            jobId,
-            subscription: snapshot.data?.subscription,
-            quota: snapshot.data?.quota,
-          ),
+          onGenerateAi: () => _openAiPlan(subscription: snapshot.data?.subscription),
           onNutritionist: () {
             final tier = resolvePlanTier(snapshot.data?.subscription);
             if (!canAccessNutritionist(tier)) {
@@ -1228,7 +1116,6 @@ class _SelfPlanNextStepPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const aiService = AiDietService();
     return Scaffold(
       appBar: AppBar(title: const Text("Next step")),
       body: SafeArea(
@@ -1246,28 +1133,45 @@ class _SelfPlanNextStepPage extends StatelessWidget {
               icon: Icons.auto_awesome_rounded,
               accent: kPrimary,
               onTap: () async {
-                try {
-                  await aiService.requestPlan(data: data, jobId: null);
-                  await saveDietGenerationChoice('ai');
-                  if (!context.mounted) return;
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text("AI plan request submitted.")),
-                  );
-                  Navigator.pushReplacement(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => DietPlanPage(
-                        data: data,
-                        preferencesBuilder: preferencesBuilder,
-                      ),
+                final subscription = await fetchUserSubscription();
+                final tier = resolvePlanTier(subscription);
+                final canUseAi = tier == PlanTier.elite || tier == PlanTier.pro;
+                if (!context.mounted) return;
+                if (!canUseAi) {
+                  showDialog<void>(
+                    context: context,
+                    builder: (_) => AlertDialog(
+                      title: const Text("Upgrade plan"),
+                      content: const Text("AI plan is available on Pro and Elite plans."),
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.pop(context),
+                          child: const Text("Back"),
+                        ),
+                        FilledButton(
+                          onPressed: () {
+                            Navigator.pop(context);
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(builder: (_) => UpgradePlanPage(data: data)),
+                            );
+                          },
+                          child: const Text("Upgrade plan"),
+                        ),
+                      ],
                     ),
                   );
-                } catch (error) {
-                  if (!context.mounted) return;
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text("Unable to request AI plan: $error")),
-                  );
+                  return;
                 }
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => AiPlanPage(
+                      data: data,
+                      preferencesBuilder: preferencesBuilder,
+                    ),
+                  ),
+                );
               },
             ),
             const SizedBox(height: 16),

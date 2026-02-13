@@ -1,0 +1,9 @@
+{
+  "functions": [
+    {
+      "codebase": "ai-flask",
+      "source": "functions",
+      "runtime": "python311"
+    }
+  ]
+}
