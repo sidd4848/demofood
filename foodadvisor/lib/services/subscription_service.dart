@@ -105,13 +105,17 @@ class SubscriptionService {
       if (snapshot.docs.isEmpty) return null;
       return SubscriptionUpgradeRequestSummary.fromJson(snapshot.docs.first.data());
     } on FirebaseException {
-      final snapshot = await FirebaseFirestore.instance
-          .collection(upgradeRequestCollection)
-          .where('userId', isEqualTo: userId)
-          .limit(1)
-          .get();
-      if (snapshot.docs.isEmpty) return null;
-      return SubscriptionUpgradeRequestSummary.fromJson(snapshot.docs.first.data());
+      try {
+        final snapshot = await FirebaseFirestore.instance
+            .collection(upgradeRequestCollection)
+            .where('userId', isEqualTo: userId)
+            .limit(1)
+            .get();
+        if (snapshot.docs.isEmpty) return null;
+        return SubscriptionUpgradeRequestSummary.fromJson(snapshot.docs.first.data());
+      } on FirebaseException {
+        return null;
+      }
     }
   }
 }
