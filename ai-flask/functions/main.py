@@ -3,8 +3,6 @@ import json
 from pydantic import BaseModel
 from typing import Any, Dict, Optional
 import logging
-import vertexai
-from vertexai.generative_models import GenerativeModel, GenerationConfig
 
 import re
 
@@ -71,6 +69,9 @@ def generate_diet_plan(prompt, user_data, user_ref):
 
     print(f"Final prompt text: {prompt_text}")
 
+    import vertexai
+    from vertexai.generative_models import GenerativeModel, GenerationConfig
+    
     vertexai.init(
         project="foodadvisor-e2cd0",
         location="us-central1"
@@ -84,7 +85,7 @@ def generate_diet_plan(prompt, user_data, user_ref):
                         )
 
     # Load the Gemini Pro model
-    model = GenerativeModel.from_pretrained("gemini-2.0-flash-001")
+    model = GenerativeModel("gemini-2.0-flash-001")
 
     # Generate a diet plan based on the prompt
     response = model.generate_content(
@@ -142,7 +143,7 @@ def generate_diet_by_ai(req: https_fn.CallableRequest) -> Any:
         
         prompt = db.collection("prompt").document(type_req).get()
 
-        generate_diet_plan(prompt, user_data, quota_dic, user_ref)
+        generate_diet_plan(prompt, user_data, user_ref)
 
         
         #update quota

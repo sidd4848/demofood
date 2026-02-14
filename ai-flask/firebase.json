@@ -3,6 +3,7 @@
     {
       "codebase": "ai-flask",
       "source": "functions",
+       "memory": "1GiB",
       "runtime": "python311"
     }
   ]
