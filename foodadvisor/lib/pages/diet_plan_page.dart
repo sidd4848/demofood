@@ -452,13 +452,26 @@ class _DietPlanPageState extends State<DietPlanPage> {
     }
 
     if (dietPlan == null) {
-      return const _DietLoadingState(
+      return _DietLoadingState(
         message: "Diet is loading soon.",
+        actionLabel: "Regenerate diet plan",
+        onAction: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => DietGenerationOptionsPage(
+                data: widget.data,
+                preferencesBuilder: widget.preferencesBuilder,
+              ),
+            ),
+          );
+        },
       );
     }
 
     final plans = _dayPlans(dietPlan);
     _ensureEditablePlan(dietPlan.plan);
+    final tier = resolvePlanTier(snapshot.data?.subscription);
     const bottomBarHeight = 140.0;
     final planList = ListView(
       padding: const EdgeInsets.fromLTRB(20, 20, 20, bottomBarHeight),
@@ -481,6 +494,8 @@ class _DietPlanPageState extends State<DietPlanPage> {
           ),
         if (snapshot.data?.subscription != null) const SizedBox(height: 12),
         _FinalizePlanActions(
+          canUseAi: tier == PlanTier.pro || tier == PlanTier.elite,
+          canUseNutritionist: tier == PlanTier.elite,
           onGenerateAi: () => _openAiPlan(subscription: snapshot.data?.subscription),
           onNutritionist: () {
             final tier = resolvePlanTier(snapshot.data?.subscription);
@@ -766,7 +781,14 @@ class _DietPlanBundle {
 
 class _DietLoadingState extends StatelessWidget {
   final String message;
-  const _DietLoadingState({required this.message});
+  final String? actionLabel;
+  final VoidCallback? onAction;
+
+  const _DietLoadingState({
+    required this.message,
+    this.actionLabel,
+    this.onAction,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -785,6 +807,16 @@ class _DietLoadingState extends StatelessWidget {
           textAlign: TextAlign.center,
           style: TextStyle(color: Colors.grey.shade700),
         ),
+        if (actionLabel != null && onAction != null) ...[
+          const SizedBox(height: 16),
+          Center(
+            child: FilledButton.icon(
+              onPressed: onAction,
+              icon: const Icon(Icons.refresh_rounded),
+              label: Text(actionLabel!),
+            ),
+          ),
+        ],
         const SizedBox(height: 20),
         Center(
           child: ClipRRect(
@@ -1316,10 +1348,14 @@ class _DietHeader extends StatelessWidget {
 class _FinalizePlanActions extends StatelessWidget {
   final VoidCallback onNutritionist;
   final VoidCallback onGenerateAi;
+  final bool canUseAi;
+  final bool canUseNutritionist;
 
   const _FinalizePlanActions({
     required this.onNutritionist,
     required this.onGenerateAi,
+    required this.canUseAi,
+    required this.canUseNutritionist,
   });
 
   @override
@@ -1329,6 +1365,9 @@ class _FinalizePlanActions extends StatelessWidget {
         Expanded(
           child: OutlinedButton.icon(
             onPressed: onGenerateAi,
+            style: OutlinedButton.styleFrom(
+              foregroundColor: canUseAi ? null : Colors.grey.shade500,
+            ),
             icon: const Icon(Icons.auto_awesome_outlined),
             label: const Text("Generate by AI"),
           ),
@@ -1337,6 +1376,10 @@ class _FinalizePlanActions extends StatelessWidget {
         Expanded(
           child: FilledButton.icon(
             onPressed: onNutritionist,
+            style: FilledButton.styleFrom(
+              backgroundColor: canUseNutritionist ? null : Colors.grey.shade400,
+              foregroundColor: Colors.white,
+            ),
             icon: const Icon(Icons.health_and_safety_outlined),
             label: const Text("Nutritionist"),
           ),
