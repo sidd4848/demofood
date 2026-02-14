@@ -44,6 +44,7 @@ class _AiPlanPageState extends State<AiPlanPage> {
       final callable = FirebaseFunctions.instance.httpsCallable('generate_diet_by_ai');
       await callable.call(<String, dynamic>{
         'userId': user.uid,
+        'type_request': 'generate_diet'
       });
 
       await saveDietGenerationChoice('ai');

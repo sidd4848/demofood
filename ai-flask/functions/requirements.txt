@@ -1,2 +1,4 @@
 firebase-admin
 firebase-functions
+google-cloud-aiplatform>=1.50.0
+pydantic 
