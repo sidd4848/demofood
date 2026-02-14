@@ -81,8 +81,14 @@ service cloud.firestore {
 
     match /userdiethistory/{userId} {
       allow read: if isOwner(userId);
-      allow create: if false;
-      allow update, delete: if false;
+      allow create, update: if isOwner(userId);
+      allow delete: if false;
+    }
+
+    match /userDietHistory/{userId} {
+      allow read: if isOwner(userId);
+      allow create, update: if isOwner(userId);
+      allow delete: if false;
     }
   }
 }
