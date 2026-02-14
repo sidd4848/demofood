@@ -67,7 +67,11 @@ class _DietPlanPageState extends State<DietPlanPage> {
     final user = FirebaseAuth.instance.currentUser;
     SubscriptionUpgradeRequestSummary? upgradeRequest;
     if (user != null) {
-      upgradeRequest = await _subscriptionService.fetchLatestUpgradeRequest(userId: user.uid);
+      try {
+        upgradeRequest = await _subscriptionService.fetchLatestUpgradeRequest(userId: user.uid);
+      } catch (_) {
+        upgradeRequest = null;
+      }
     }
     return _DietPlanBundle(
       plan: resolvedPlan,
