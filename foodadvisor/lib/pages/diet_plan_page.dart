@@ -434,18 +434,16 @@ class _DietPlanPageState extends State<DietPlanPage> {
             ),
           );
         },
-        onSave: jobId == null
-            ? null
-            : (startDate) async {
-                final deficitValue = int.tryParse(_selfDeficitController.text.trim()) ?? 300;
-                await saveSelfDietPlan(
-                  jobId: jobId,
-                  calorieDeficit: deficitValue,
-                  plan: _editablePlan,
-                  startDate: startDate,
-                );
-                _refreshPlan();
-              },
+        onSave: (startDate) async {
+          final deficitValue = int.tryParse(_selfDeficitController.text.trim()) ?? 300;
+          await saveSelfDietPlan(
+            jobId: jobId,
+            calorieDeficit: deficitValue,
+            plan: _editablePlan,
+            startDate: startDate,
+          );
+          _refreshPlan();
+        },
       );
     }
 

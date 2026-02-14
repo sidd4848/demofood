@@ -197,12 +197,7 @@ Future<DietPlanData?> fetchDietPlan() async {
   if (user == null) return null;
   Map<String, dynamic>? dietData;
   try {
-    final historySnapshot = await FirebaseFirestore.instance
-        .collection('userdiethistory')
-        .doc(user.uid)
-        .get();
-    if (!historySnapshot.exists) return null;
-    final historyData = historySnapshot.data();
+    final historyData = await _fetchDietHistoryData(user.uid);
     if (historyData == null) return null;
     final jobIdRaw = historyData['job_id'];
     String? jobId;
@@ -235,12 +230,7 @@ Future<DietPlanData?> fetchDietPlan() async {
     final deficitRaw = dietData['calorie deficit'];
     final deficit = deficitRaw is int ? deficitRaw : (deficitRaw as num?)?.toInt() ?? 0;
     final planRaw = dietData['plan'];
-    final plan = <String, String>{};
-    if (planRaw is Map<String, dynamic>) {
-      planRaw.forEach((key, value) {
-        plan[key] = value?.toString() ?? '';
-      });
-    }
+    final plan = _normalizeDietPlan(planRaw);
     return DietPlanData(
       jobId: resolvedJobId,
       userId: userId,
@@ -252,6 +242,93 @@ Future<DietPlanData?> fetchDietPlan() async {
   } on FirebaseException {
     return null;
   }
+}
+
+Map<String, String> _normalizeDietPlan(dynamic rawPlan) {
+  final normalized = <String, String>{};
+  if (rawPlan is! Map) return normalized;
+
+  rawPlan.forEach((key, value) {
+    final keyText = key?.toString() ?? '';
+    if (_looksLikeLegacyMealKey(keyText)) {
+      normalized[keyText] = value?.toString() ?? '';
+      return;
+    }
+
+    final day = _normalizeWeekdayKey(keyText);
+    if (day == null || value is! Map) return;
+
+    final normalizedMeals = <String, String>{};
+    value.forEach((mealKey, mealValue) {
+      final normalizedMealKey = mealKey?.toString().trim().toLowerCase();
+      if (normalizedMealKey == null || normalizedMealKey.isEmpty) return;
+      normalizedMeals[normalizedMealKey] = mealValue?.toString() ?? '';
+    });
+    final breakfast = normalizedMeals['breakfast'];
+    final lunch = normalizedMeals['lunch'];
+    final dinner = normalizedMeals['dinner'];
+    if (breakfast != null) normalized['${day}_breakfast'] = breakfast;
+    if (lunch != null) normalized['${day}_lunch'] = lunch;
+    if (dinner != null) normalized['${day}_dinner'] = dinner;
+  });
+
+  return normalized;
+}
+
+Map<String, Map<String, String>> _toNestedDietPlan(Map<String, String> plan) {
+  final nested = <String, Map<String, String>>{};
+  plan.forEach((key, value) {
+    final parts = key.split('_');
+    if (parts.length != 2) return;
+    final day = _normalizeWeekdayKey(parts.first);
+    final meal = parts.last.trim().toLowerCase();
+    if (day == null) return;
+    if (meal != 'breakfast' && meal != 'lunch' && meal != 'dinner') return;
+    nested.putIfAbsent(day, () => <String, String>{})[meal] = value;
+  });
+  return nested;
+}
+
+
+String? _normalizeWeekdayKey(String? value) {
+  if (value == null || value.isEmpty) return null;
+  final compact = value.trim();
+  switch (compact.toLowerCase()) {
+    case 'mon':
+    case 'monday':
+      return 'Mon';
+    case 'tue':
+    case 'tues':
+    case 'tuesday':
+      return 'Tue';
+    case 'wed':
+    case 'weds':
+    case 'wednesday':
+      return 'Wed';
+    case 'thu':
+    case 'thur':
+    case 'thurs':
+    case 'thursday':
+      return 'Thu';
+    case 'fri':
+    case 'friday':
+      return 'Fri';
+    case 'sat':
+    case 'saturday':
+      return 'Sat';
+    case 'sun':
+    case 'sunday':
+      return 'Sun';
+  }
+  return null;
+}
+
+bool _looksLikeLegacyMealKey(String value) {
+  final parts = value.split('_');
+  if (parts.length != 2) return false;
+  final day = _normalizeWeekdayKey(parts.first);
+  if (day == null) return false;
+  return parts.last == 'breakfast' || parts.last == 'lunch' || parts.last == 'dinner';
 }
 
 DateTime? _parseFirestoreTimestamp(dynamic value) {
@@ -268,7 +345,7 @@ DateTime? _parseFirestoreTimestamp(dynamic value) {
 }
 
 Future<void> saveSelfDietPlan({
-  required String jobId,
+  String? jobId,
   required int calorieDeficit,
   required Map<String, String> plan,
   DateTime? startDate,
@@ -277,27 +354,53 @@ Future<void> saveSelfDietPlan({
   if (user == null) {
     throw StateError('No authenticated user.');
   }
-  final dietRef = FirebaseFirestore.instance.collection('diet').doc(jobId);
+  final resolvedJobId = (jobId != null && jobId.trim().isNotEmpty)
+      ? jobId.trim()
+      : FirebaseFirestore.instance.collection('diet').doc().id;
+  final dietRef = FirebaseFirestore.instance.collection('diet').doc(resolvedJobId);
   final payload = <String, dynamic>{
-    'jobId': jobId,
+    'jobId': resolvedJobId,
     'userId': user.uid,
-    'generatedBy': 'self',
+    'createdby': 'self',
     'createdBy': 'self',
+    'generatedBy': 'self',
     'calorie deficit': calorieDeficit,
-    'plan': plan,
+    'plan': _toNestedDietPlan(plan),
     'updatedBy': user.uid,
     'updatedAt': FieldValue.serverTimestamp(),
+    'createdAt': FieldValue.serverTimestamp(),
   };
   if (startDate != null) {
     payload['startDate'] = Timestamp.fromDate(startDate);
   }
   await dietRef.set(payload, SetOptions(merge: true));
 
-  final historyRef = FirebaseFirestore.instance.collection('userdiethistory').doc(user.uid);
-  await historyRef.set({
-    'job_id': FieldValue.arrayUnion([jobId]),
+  final historyPayload = {
+    'user_id': user.uid,
+    'job_id': FieldValue.arrayUnion([resolvedJobId]),
     'updatedAt': FieldValue.serverTimestamp(),
-  }, SetOptions(merge: true));
+  };
+  await FirebaseFirestore.instance
+      .collection('userdiethistory')
+      .doc(user.uid)
+      .set(historyPayload, SetOptions(merge: true));
+  await FirebaseFirestore.instance
+      .collection('userDietHistory')
+      .doc(user.uid)
+      .set(historyPayload, SetOptions(merge: true));
+}
+
+
+Future<Map<String, dynamic>?> _fetchDietHistoryData(String userId) async {
+  final primary = await FirebaseFirestore.instance.collection('userdiethistory').doc(userId).get();
+  if (primary.exists) {
+    final data = primary.data();
+    if (data != null) return data;
+  }
+
+  final camelCase = await FirebaseFirestore.instance.collection('userDietHistory').doc(userId).get();
+  if (!camelCase.exists) return null;
+  return camelCase.data();
 }
 
 Future<bool> hasExistingProfile() async {
@@ -342,9 +445,7 @@ Future<UserProfileSummary?> fetchUserProfileSummary() async {
 Future<String?> fetchProfileJobId() async {
   final user = FirebaseAuth.instance.currentUser;
   if (user == null) return null;
-  final snapshot = await FirebaseFirestore.instance.collection('userdiethistory').doc(user.uid).get();
-  if (!snapshot.exists) return null;
-  final data = snapshot.data();
+  final data = await _fetchDietHistoryData(user.uid);
   if (data == null) return null;
   final jobIds = data['job_id'];
   if (jobIds is! List || jobIds.isEmpty) return null;
