@@ -235,12 +235,7 @@ Future<DietPlanData?> fetchDietPlan() async {
     final deficitRaw = dietData['calorie deficit'];
     final deficit = deficitRaw is int ? deficitRaw : (deficitRaw as num?)?.toInt() ?? 0;
     final planRaw = dietData['plan'];
-    final plan = <String, String>{};
-    if (planRaw is Map<String, dynamic>) {
-      planRaw.forEach((key, value) {
-        plan[key] = value?.toString() ?? '';
-      });
-    }
+    final plan = _normalizeDietPlan(planRaw);
     return DietPlanData(
       jobId: resolvedJobId,
       userId: userId,
@@ -252,6 +247,80 @@ Future<DietPlanData?> fetchDietPlan() async {
   } on FirebaseException {
     return null;
   }
+}
+
+Map<String, String> _normalizeDietPlan(dynamic rawPlan) {
+  final normalized = <String, String>{};
+  if (rawPlan is! Map) return normalized;
+
+  rawPlan.forEach((key, value) {
+    final day = _normalizeWeekdayKey(key?.toString());
+    if (day == null) return;
+
+    if (value is Map) {
+      final normalizedMeals = <String, String>{};
+      value.forEach((mealKey, mealValue) {
+        final normalizedMealKey = mealKey?.toString().trim().toLowerCase();
+        if (normalizedMealKey == null || normalizedMealKey.isEmpty) return;
+        normalizedMeals[normalizedMealKey] = mealValue?.toString() ?? '';
+      });
+      final breakfast = normalizedMeals['breakfast'];
+      final lunch = normalizedMeals['lunch'];
+      final dinner = normalizedMeals['dinner'];
+      if (breakfast != null) normalized['${day}_breakfast'] = breakfast;
+      if (lunch != null) normalized['${day}_lunch'] = lunch;
+      if (dinner != null) normalized['${day}_dinner'] = dinner;
+      return;
+    }
+
+    final keyText = key?.toString() ?? '';
+    if (_looksLikeLegacyMealKey(keyText)) {
+      normalized[keyText] = value?.toString() ?? '';
+    }
+  });
+
+  return normalized;
+}
+
+String? _normalizeWeekdayKey(String? value) {
+  if (value == null || value.isEmpty) return null;
+  final compact = value.trim();
+  switch (compact.toLowerCase()) {
+    case 'mon':
+    case 'monday':
+      return 'Mon';
+    case 'tue':
+    case 'tues':
+    case 'tuesday':
+      return 'Tue';
+    case 'wed':
+    case 'weds':
+    case 'wednesday':
+      return 'Wed';
+    case 'thu':
+    case 'thur':
+    case 'thurs':
+    case 'thursday':
+      return 'Thu';
+    case 'fri':
+    case 'friday':
+      return 'Fri';
+    case 'sat':
+    case 'saturday':
+      return 'Sat';
+    case 'sun':
+    case 'sunday':
+      return 'Sun';
+  }
+  return null;
+}
+
+bool _looksLikeLegacyMealKey(String value) {
+  final parts = value.split('_');
+  if (parts.length != 2) return false;
+  final day = _normalizeWeekdayKey(parts.first);
+  if (day == null) return false;
+  return parts.last == 'breakfast' || parts.last == 'lunch' || parts.last == 'dinner';
 }
 
 DateTime? _parseFirestoreTimestamp(dynamic value) {
