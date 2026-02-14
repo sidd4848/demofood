@@ -14,23 +14,6 @@ initialize_app()
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-from pydantic import BaseModel
-
-class Meal(BaseModel):
-    breakfast: str
-    lunch: str
-    dinner: str
-
-class WeeklyDietPlan(BaseModel):
-    Mon: Meal
-    Tue: Meal
-    Wed: Meal
-    Thu: Meal
-    Fri: Meal
-    Sat: Meal
-    Sun: Meal
-
-
 def check_quota(quota: int, user_id: str) -> dict:
     if quota == 0:
         return {
@@ -42,7 +25,36 @@ def check_quota(quota: int, user_id: str) -> dict:
         "quotaExceeded": False
     }
 
-def generate_diet_plan(prompt, user_data, user_ref):
+def update_firestore_database(diet_plan: str, user_id: str, db):
+    # create a random document id
+    diet_ref = db.collection("diet").document()
+    job_id = diet_ref.id
+    diet_ref.set({
+        "userId": user_id,
+        "plan": diet_plan.model_dump(),
+        "createdAt": firestore.SERVER_TIMESTAMP,
+        "jobId": job_id,
+        "createdby": "generate_diet_by_ai"
+    })
+
+    #create a document with userid in collection userdiethistory
+    history_ref = db.collection("userDietHistory").document(user_id)
+    if not history_ref.get().exists:
+        history_ref.set({
+            "userId": user_id,
+            "job_id": [job_id]
+        })
+        print(f"Created new userDietHistory document for userId: {user_id} with job_id: {job_id}")
+    else:
+        print(f"userDietHistory document already exists for userId: {user_id}, updating with new job_id: {job_id}")
+    # if document exists, update the document with new diet plan and timestamp, else create a new document
+    history_ref.update({
+        "job_id": firestore.ArrayUnion([job_id])
+    })
+
+    return job_id
+
+def generate_diet_plan(prompt, user_data, user_id, db):
     # replace $dietType, $weight, $height, $body_fat_pct and $visceral_fat_pct, $symptoms, in prompt
     prompt_text = prompt.to_dict().get("prompt", "")
     diet_type = user_data.get("profile").get("preferences").get("dietType")
@@ -71,7 +83,22 @@ def generate_diet_plan(prompt, user_data, user_ref):
 
     import vertexai
     from vertexai.generative_models import GenerativeModel, GenerationConfig
-    
+    from pydantic import BaseModel
+
+    class Meal(BaseModel):
+        breakfast: str
+        lunch: str
+        dinner: str
+
+    class WeeklyDietPlan(BaseModel):
+        Mon: Meal
+        Tue: Meal
+        Wed: Meal
+        Thu: Meal
+        Fri: Meal
+        Sat: Meal
+        Sun: Meal
+
     vertexai.init(
         project="foodadvisor-e2cd0",
         location="us-central1"
@@ -95,7 +122,9 @@ def generate_diet_plan(prompt, user_data, user_ref):
 
     print(f"Generated diet plan response: {response.text}")
     diet_plan = WeeklyDietPlan.model_validate_json(response.text)
-    print(f"Parsed diet plan: {diet_plan}")
+    job_id = update_firestore_database(diet_plan, user_id, db)
+
+    return job_id
 
     # Store the generated diet plan in Firestore
 
@@ -143,7 +172,7 @@ def generate_diet_by_ai(req: https_fn.CallableRequest) -> Any:
         
         prompt = db.collection("prompt").document(type_req).get()
 
-        generate_diet_plan(prompt, user_data, user_ref)
+        job_id = generate_diet_plan(prompt, user_data, user_id, db)
 
         
         #update quota
@@ -167,12 +196,9 @@ def generate_diet_by_ai(req: https_fn.CallableRequest) -> Any:
             message=f"An error occurred while processing the request: {str(e)}",
         )
 
-    # print(f"user_snapshot data: {user_data.profile}, type: {type(user_data.profile)}  ")
-    request_ref = db.collection("aiDietPlans").document()
-    request_ref.set(user_data)
 
     return {
-        "requestId": request_ref.id,
+        "requestId": job_id,
         "userId": user_id,
         "userExists": True,
     }
