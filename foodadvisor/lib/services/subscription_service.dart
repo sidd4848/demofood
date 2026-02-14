@@ -99,23 +99,24 @@ class SubscriptionService {
       final snapshot = await FirebaseFirestore.instance
           .collection(upgradeRequestCollection)
           .where('userId', isEqualTo: userId)
-          .orderBy('createdAt', descending: true)
-          .limit(1)
+          .limit(20)
           .get();
       if (snapshot.docs.isEmpty) return null;
-      return SubscriptionUpgradeRequestSummary.fromJson(snapshot.docs.first.data());
+      final summaries = snapshot.docs
+          .map((doc) => SubscriptionUpgradeRequestSummary.fromJson(doc.data()))
+          .toList()
+        ..sort((a, b) {
+          final aCreatedAt = a.createdAt;
+          final bCreatedAt = b.createdAt;
+          if (aCreatedAt == null && bCreatedAt == null) return 0;
+          if (aCreatedAt == null) return 1;
+          if (bCreatedAt == null) return -1;
+          return bCreatedAt.compareTo(aCreatedAt);
+        });
+
+      return summaries.first;
     } on FirebaseException {
-      try {
-        final snapshot = await FirebaseFirestore.instance
-            .collection(upgradeRequestCollection)
-            .where('userId', isEqualTo: userId)
-            .limit(1)
-            .get();
-        if (snapshot.docs.isEmpty) return null;
-        return SubscriptionUpgradeRequestSummary.fromJson(snapshot.docs.first.data());
-      } on FirebaseException {
-        return null;
-      }
+      return null;
     }
   }
 }

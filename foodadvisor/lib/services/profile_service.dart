@@ -392,15 +392,15 @@ Future<void> saveSelfDietPlan({
 
 
 Future<Map<String, dynamic>?> _fetchDietHistoryData(String userId) async {
-  final primary = await FirebaseFirestore.instance.collection('userdiethistory').doc(userId).get();
-  if (primary.exists) {
-    final data = primary.data();
+  final camelCase = await FirebaseFirestore.instance.collection('userDietHistory').doc(userId).get();
+  if (camelCase.exists) {
+    final data = camelCase.data();
     if (data != null) return data;
   }
 
-  final camelCase = await FirebaseFirestore.instance.collection('userDietHistory').doc(userId).get();
-  if (!camelCase.exists) return null;
-  return camelCase.data();
+  final legacy = await FirebaseFirestore.instance.collection('userdiethistory').doc(userId).get();
+  if (!legacy.exists) return null;
+  return legacy.data();
 }
 
 Future<bool> hasExistingProfile() async {
