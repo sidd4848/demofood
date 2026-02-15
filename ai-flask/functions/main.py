@@ -15,6 +15,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 def check_quota(quota: int, user_id: str) -> dict:
+    print(f"Checking quota for user ID: {user_id}, current quota: {quota}")
     if quota == 0:
         return {
                 "userId": user_id,
@@ -155,6 +156,7 @@ def generate_diet_by_ai(req: https_fn.CallableRequest) -> Any:
     try:
         plan = user_data.get("plan")
         type_req = payload.get("type_request")
+        print(f"User plan: {plan}, type of request: {type_req}")
         subscriptionStatus = user_data.get("subscriptionStatus")
         if (plan == "elite" or plan == "pro") and subscriptionStatus == "active":
             quota_dic = user_data.get("quota").get("pro_quota")
