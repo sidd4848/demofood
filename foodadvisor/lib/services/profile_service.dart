@@ -221,7 +221,7 @@ Future<DietPlanData?> fetchDietPlan() async {
     dietData = dietSnapshot.data();
     if (dietData == null) return null;
     final resolvedJobId = dietData['jobId'] as String? ?? jobId;
-    final userId = dietData['userId'] as String?;
+    final userId = (dietData['userId'] as String?) ?? user.uid;
     final startDateRaw = dietData['startDate'];
     final startDate = _parseFirestoreTimestamp(startDateRaw);
     final updatedAtRaw = dietData['updatedAt'];
