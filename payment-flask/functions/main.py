@@ -86,6 +86,18 @@ def process_subscription_payment(req: https_fn.CallableRequest) -> Any:
         "updatedAt": datetime.datetime.utcnow().isoformat(),
         "currentPeriodEnd": _add_months(datetime.datetime.fromisoformat(req.data.get("createdAt")), duration_months).isoformat()
     }, merge=True)
+    doc_ref.set({
+            "quota": {
+                "pro_quota": {
+                    "recipe": 3,
+                    "diet_regeneration": 3
+                },
+                "trial_quota": {
+                    "recipe": 0,
+                    "diet_regeneration": 0
+                }
+            }
+        }, merge=True)
 
     return {
         "message": f"Successfully processed subscription for user: {user_id}",

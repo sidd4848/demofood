@@ -1,0 +1,21 @@
+steps:
+  - name: gcr.io/google.com/cloudsdktool/cloud-sdk:slim
+    entrypoint: gcloud
+    args:
+      - functions
+      - deploy
+      - generate_diet_by_ai
+      - --gen2
+      - --project=${PROJECT_ID}
+      - --region=${_REGION}
+      - --runtime=python311
+      - --source=ai-flask/functions
+      - --entry-point=generate_diet_by_ai
+      - --trigger-http
+      - --memory=${_MEMORY}
+      - --service-account=${PROJECT_ID}@appspot.gserviceaccount.com
+substitutions:
+  _REGION: us-central1
+  _MEMORY: 1Gi
+options:
+  logging: CLOUD_LOGGING_ONLY
