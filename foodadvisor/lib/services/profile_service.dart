@@ -221,7 +221,7 @@ Future<DietPlanData?> fetchDietPlan() async {
     dietData = dietSnapshot.data();
     if (dietData == null) return null;
     final resolvedJobId = dietData['jobId'] as String? ?? jobId;
-    final userId = dietData['userId'] as String?;
+    final userId = (dietData['userId'] as String?) ?? user.uid;
     final startDateRaw = dietData['startDate'];
     final startDate = _parseFirestoreTimestamp(startDateRaw);
     final updatedAtRaw = dietData['updatedAt'];
@@ -345,7 +345,6 @@ DateTime? _parseFirestoreTimestamp(dynamic value) {
 }
 
 Future<void> saveSelfDietPlan({
-  String? jobId,
   required int calorieDeficit,
   required Map<String, String> plan,
   DateTime? startDate,
@@ -354,9 +353,7 @@ Future<void> saveSelfDietPlan({
   if (user == null) {
     throw StateError('No authenticated user.');
   }
-  final resolvedJobId = (jobId != null && jobId.trim().isNotEmpty)
-      ? jobId.trim()
-      : FirebaseFirestore.instance.collection('diet').doc().id;
+  final resolvedJobId = FirebaseFirestore.instance.collection('diet').doc().id;
   final dietRef = FirebaseFirestore.instance.collection('diet').doc(resolvedJobId);
   final payload = <String, dynamic>{
     'jobId': resolvedJobId,

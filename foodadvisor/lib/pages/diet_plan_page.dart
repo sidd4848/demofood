@@ -33,7 +33,6 @@ class _DietPlanPageState extends State<DietPlanPage> {
   DietPlanData? _cachedPlan;
   final Map<String, String> _editablePlan = {};
   final TextEditingController _selfDeficitController = TextEditingController(text: '300');
-  bool _hasRoutedMissingUserId = false;
   final Map<String, _DayCompletionStatus> _dayStatuses = {};
   final Set<String> _generatedRecipes = {};
   final SubscriptionService _subscriptionService = const SubscriptionService();
@@ -178,35 +177,6 @@ class _DietPlanPageState extends State<DietPlanPage> {
       MaterialPageRoute(builder: (_) => LandingPage(data: widget.data)),
       (_) => false,
     );
-  }
-
-  void _routeMissingUserId(UserProfileSummary? profile) {
-    if (_hasRoutedMissingUserId) return;
-    _hasRoutedMissingUserId = true;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      if (profile == null) {
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(
-            builder: (_) => UserDetailsPage(
-              data: widget.data,
-              nextPageBuilder: widget.preferencesBuilder,
-            ),
-          ),
-        );
-        return;
-      }
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(
-          builder: (_) => DietGenerationOptionsPage(
-            data: widget.data,
-            preferencesBuilder: widget.preferencesBuilder,
-          ),
-        ),
-      );
-    });
   }
 
   double? _bmrForProfile(UserProfileSummary? profile) {
@@ -394,30 +364,22 @@ class _DietPlanPageState extends State<DietPlanPage> {
     final profile = snapshot.data?.profile;
     final dietPlan = snapshot.data?.plan;
     final choice = snapshot.data?.choice;
-    final jobId = snapshot.data?.jobId;
     final bmr = _bmrForProfile(profile);
     final deficit = dietPlan?.calorieDeficit ?? _calorieDeficit(bmr)?.round();
 
-    if (dietPlan != null && dietPlan.userId == null) {
-      _routeMissingUserId(profile);
-      return const _DietLoadingState(
-        message: "Updating your plan details.",
-      );
-    }
-
-    if (choice == null) {
+    if (dietPlan == null && choice == null) {
       return const _DietLoadingState(
         message: "Pick a diet generation style to continue.",
       );
     }
 
-    if (choice.generatedBy == 'nutritionist') {
+    if (choice?.generatedBy == 'nutritionist') {
       return const _DietLoadingState(
         message: "Expert nutritionist plans are coming soon.",
       );
     }
 
-    if (choice.generatedBy == 'self' && dietPlan == null) {
+    if (choice?.generatedBy == 'self' && dietPlan == null) {
       final source = dietPlan?.plan ?? _fallbackPlanMap();
       _ensureEditablePlan(source);
       return _SelfPlanEditor(
@@ -441,7 +403,6 @@ class _DietPlanPageState extends State<DietPlanPage> {
         onSave: (startDate) async {
           final deficitValue = int.tryParse(_selfDeficitController.text.trim()) ?? 300;
           await saveSelfDietPlan(
-            jobId: jobId,
             calorieDeficit: deficitValue,
             plan: _editablePlan,
             startDate: startDate,
