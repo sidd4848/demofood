@@ -364,7 +364,6 @@ class _DietPlanPageState extends State<DietPlanPage> {
     final profile = snapshot.data?.profile;
     final dietPlan = snapshot.data?.plan;
     final choice = snapshot.data?.choice;
-    final jobId = snapshot.data?.jobId;
     final bmr = _bmrForProfile(profile);
     final deficit = dietPlan?.calorieDeficit ?? _calorieDeficit(bmr)?.round();
 
@@ -404,7 +403,6 @@ class _DietPlanPageState extends State<DietPlanPage> {
         onSave: (startDate) async {
           final deficitValue = int.tryParse(_selfDeficitController.text.trim()) ?? 300;
           await saveSelfDietPlan(
-            jobId: jobId,
             calorieDeficit: deficitValue,
             plan: _editablePlan,
             startDate: startDate,
